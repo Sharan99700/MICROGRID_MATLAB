@@ -1,0 +1,2966 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MPBSI Framework - Grid-Independent Renewable Microgrids</title>
+    <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+            background-attachment: fixed;
+            color: #e0e0e0;
+            min-height: 100vh;
+            position: relative;
+            overflow-x: hidden;
+        }
+        
+        /* Animated background particles */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at 20% 50%, rgba(102, 126, 234, 0.1) 0%, transparent 50%),
+                        radial-gradient(circle at 80% 80%, rgba(118, 75, 162, 0.1) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+        
+        .container { 
+            max-width: 1400px; 
+            margin: 0 auto; 
+            padding: 20px; 
+            position: relative;
+            z-index: 1;
+        }
+        
+        header {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.95) 0%, rgba(118, 75, 162, 0.95) 100%);
+            backdrop-filter: blur(10px);
+            padding: 40px 20px;
+            text-align: center;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            margin-bottom: 30px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            animation: slideDown 0.6s ease-out;
+        }
+        
+        @keyframes slideDown {
+            from { transform: translateY(-50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        h1 { 
+            color: #fff; 
+            font-size: 2.8em; 
+            margin-bottom: 10px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        }
+        
+        .subtitle { 
+            color: rgba(255,255,255,0.95); 
+            font-size: 1.15em;
+            font-weight: 400;
+            letter-spacing: 0.3px;
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 10px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .tab {
+            padding: 14px 28px;
+            background: rgba(102, 126, 234, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            color: #e0e0e0;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .tab::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+        
+        .tab:hover::before {
+            width: 300px;
+            height: 300px;
+        }
+        
+        .tab:hover {
+            background: rgba(102, 126, 234, 0.4);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(102, 126, 234, 0.3);
+        }
+        
+        .tab.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.5);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+        
+        .tab-content { 
+            display: none; 
+            animation: fadeIn 0.4s ease-out;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .tab-content.active { display: block; }
+        
+        .card {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.08) 0%, rgba(118, 75, 162, 0.08) 100%);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 25px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent);
+            transition: left 0.5s;
+        }
+        
+        .card:hover::before {
+            left: 100%;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 40px rgba(102, 126, 234, 0.2);
+            border-color: rgba(102, 126, 234, 0.3);
+        }
+        
+        .card.full-width { grid-column: 1 / -1; }
+        
+        .card h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.6em;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .input-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .input-group {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        label {
+            color: #a0a8d4;
+            margin-bottom: 10px;
+            font-weight: 600;
+            font-size: 0.95em;
+            letter-spacing: 0.3px;
+        }
+        
+        input, select {
+            padding: 14px 18px;
+            background: rgba(255,255,255,0.08);
+            border: 1.5px solid rgba(102, 126, 234, 0.3);
+            border-radius: 10px;
+            color: #e0e0e0;
+            font-size: 1em;
+            transition: all 0.3s ease;
+        }
+        
+        /* Dropdown options styling for better visibility */
+        select option {
+            background: #1a1a2e;
+            color: #ffffff;
+            padding: 10px;
+            font-weight: 500;
+        }
+        
+        select option:hover {
+            background: #667eea;
+            color: #ffffff;
+        }
+        
+        /* Firefox specific */
+        select option:checked {
+            background: #667eea;
+            color: #ffffff;
+        }
+        
+        input:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+            background: rgba(255,255,255,0.12);
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            transform: translateY(-2px);
+        }
+        
+        input:hover, select:hover {
+            border-color: rgba(102, 126, 234, 0.5);
+        }
+        
+        button {
+            padding: 16px 32px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 12px;
+            color: #fff;
+            font-size: 1.05em;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        button::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+        
+        button:hover::before {
+            width: 300px;
+            height: 300px;
+        }
+        
+        button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.6);
+        }
+        
+        button:active {
+            transform: translateY(-1px);
+        }
+        
+        button:disabled {
+            background: rgba(102, 126, 234, 0.3);
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .info-box {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
+            border-left: 4px solid #667eea;
+            padding: 20px;
+            border-radius: 12px;
+            margin: 20px 0;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(102, 126, 234, 0.2);
+        }
+        
+        .info-box p { 
+            margin: 8px 0; 
+            line-height: 1.7;
+            color: #d0d4e8;
+        }
+        
+        .collapsible {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.25) 0%, rgba(118, 75, 162, 0.25) 100%);
+            color: #fff;
+            cursor: pointer;
+            padding: 18px 24px;
+            width: 100%;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            text-align: left;
+            outline: none;
+            font-size: 1.15em;
+            font-weight: 600;
+            border-radius: 12px;
+            margin-top: 15px;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        
+        .collapsible:hover { 
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.35) 0%, rgba(118, 75, 162, 0.35) 100%);
+            transform: translateX(5px);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+        
+        .collapsible::after {
+            content: '+';
+            position: absolute;
+            right: 24px;
+            font-size: 1.5em;
+            transition: transform 0.3s ease;
+        }
+        
+        .collapsible.active::after {
+            content: '−';
+        }
+        
+        .collapsible-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+            margin: 25px 0;
+        }
+        
+        .metric-card {
+            text-align: center;
+            padding: 25px;
+            background: linear-gradient(135deg, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.2) 100%);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .metric-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+        }
+        
+        .metric-card:hover {
+            transform: translateY(-5px) scale(1.02);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+            border-color: rgba(102, 126, 234, 0.5);
+        }
+        
+        .metric-card .label {
+            color: #a0a8d4;
+            font-size: 0.95em;
+            margin-bottom: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .metric-card .value {
+            color: #667eea;
+            font-size: 2em;
+            font-weight: 800;
+            text-shadow: 0 2px 10px rgba(102, 126, 234, 0.3);
+        }
+        
+        .chart-container {
+            min-height: 400px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+        
+        .chart-container:hover {
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.2);
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 20px 0;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        th, td {
+            padding: 16px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+        
+        th {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.3) 0%, rgba(118, 75, 162, 0.3) 100%);
+            color: #fff;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-size: 0.9em;
+        }
+        
+        tr {
+            transition: all 0.3s ease;
+        }
+        
+        tr:hover {
+            background: rgba(102, 126, 234, 0.1);
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 10px 20px;
+            border-radius: 25px;
+            font-size: 0.95em;
+            font-weight: 700;
+            margin: 12px 0;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            animation: pulse 2s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        .status-feasible {
+            background: linear-gradient(135deg, rgba(56, 239, 125, 0.2) 0%, rgba(17, 153, 142, 0.2) 100%);
+            color: #38ef7d;
+            border: 2px solid #38ef7d;
+            box-shadow: 0 4px 15px rgba(56, 239, 125, 0.3);
+        }
+        
+        .status-infeasible {
+            background: linear-gradient(135deg, rgba(255, 107, 107, 0.2) 0%, rgba(239, 71, 111, 0.2) 100%);
+            color: #ff6b6b;
+            border: 2px solid #ff6b6b;
+            box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
+        }
+        
+        #loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 12, 41, 0.95);
+            backdrop-filter: blur(10px);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        
+        .spinner {
+            width: 80px;
+            height: 80px;
+            border: 6px solid rgba(255,255,255,0.1);
+            border-top: 6px solid #667eea;
+            border-right: 6px solid #764ba2;
+            border-radius: 50%;
+            animation: spin 1s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 12px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border-radius: 10px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(135deg, #764ba2, #667eea);
+        }
+        
+        /* File input styling */
+        input[type="file"] {
+            padding: 20px;
+            background: rgba(102, 126, 234, 0.1);
+            border: 2px dashed rgba(102, 126, 234, 0.5);
+            cursor: pointer;
+        }
+        
+        input[type="file"]:hover {
+            background: rgba(102, 126, 234, 0.2);
+            border-color: #667eea;
+        }
+        
+        /* Responsive design */
+        @media (max-width: 768px) {
+            h1 { font-size: 2em; }
+            .subtitle { font-size: 0.95em; }
+            .tabs { flex-direction: column; }
+            .input-row { grid-template-columns: 1fr; }
+            .card { padding: 20px; }
+            .results-grid { grid-template-columns: 1fr; }
+            .metric-card .value { font-size: 1.8em; }
+        }
+        
+        /* Pillar weight styling */
+        .pillar-weight {
+            color: #38ef7d;
+            font-weight: 800;
+            font-size: 1.1em;
+            text-shadow: 0 0 10px rgba(56, 239, 125, 0.5);
+            transition: all 0.3s ease;
+        }
+        
+        #formula-tri, #formula-ori, #formula-lsi, #formula-esi, #formula-ecsi {
+            color: #667eea;
+            font-weight: 700;
+            transition: all 0.3s ease;
+        }
+        
+        /* Smooth transitions for all elements */
+        * {
+            transition: background-color 0.3s ease, border-color 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">
+        <div style="text-align: center;">
+            <div class="spinner"></div>
+            <p style="color: #fff; margin-top: 20px; font-size: 1.2em;" id="loading_text">Processing...</p>
+        </div>
+    </div>
+
+    <header>
+        <h1>🔋 MPBSI Framework</h1>
+        <p class="subtitle">Mission-Priority-Based Sustainability Index for Grid-Independent Renewable Microgrids</p>
+    </header>
+
+    <div class="container">
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('data')">📊 Data Upload</button>
+            <button class="tab" onclick="switchTab('initial_sizing')">📋 Summary</button>
+            <button class="tab" onclick="switchTab('optimize')">⚙️ Optimize</button>
+            <button class="tab" id="tab_btn_running" onclick="switchTab('running')" style="display:none;">⚡ Running...</button>
+            <button class="tab" onclick="switchTab('results')">📈 Results</button>
+            <button class="tab" onclick="switchTab('graphs')">📉 Graphs</button>
+            <button class="tab" onclick="switchTab('pillars')">🏛️ Pillars</button>
+        </div>
+
+        <!-- DATA UPLOAD TAB -->
+        <div id="data" class="tab-content active">
+            <div class="card">
+                <h2>📤 Upload Meteorological Data</h2>
+                <p style="margin-bottom: 20px; color: #8b9dc3;">Upload your Excel/CSV file with 8760 hourly rows (GHI_W_per_m2, WindSpeed_mps, Load_kW), then click Submit.</p>
+                <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+                    <input type="file" id="file_input" accept=".xlsx,.xls,.csv" onchange="onFileSelected(this)" style="flex:1; min-width:220px;">
+                    <button id="submit_btn" onclick="submitAndCalculate()" disabled
+                        style="padding:14px 32px; background:linear-gradient(135deg,#667eea,#764ba2);
+                               color:#fff; border:none; border-radius:12px; font-size:1.05em;
+                               font-weight:700; cursor:not-allowed; opacity:0.45;
+                               transition:all 0.3s ease; white-space:nowrap;
+                               box-shadow:0 4px 15px rgba(102,126,234,0.4);">
+                        ⚡ Submit &amp; Calculate
+                    </button>
+                </div>
+                <div id="upload_status" style="margin-top: 15px;"></div>
+            </div>
+        </div>
+
+        <!-- SUMMARY TAB -->
+        <div id="initial_sizing" class="tab-content">
+
+            <!-- No data uploaded yet -->
+            <div id="summary_empty_state" class="card full-width">
+                <div style="text-align:center; padding:60px 20px;">
+                    <div style="font-size:4em; margin-bottom:16px;">📂</div>
+                    <h2 style="color:#a78bfa; margin-bottom:10px;">No Dataset Uploaded Yet</h2>
+                    <p style="color:#8b9dc3;">Upload a dataset from the <strong style="color:#60a5fa;">Data Upload</strong> tab or from the sidebar to see the full summary here.</p>
+                </div>
+            </div>
+
+            <!-- Summary content — shown after upload -->
+            <div id="summary_content" style="display:none;">
+
+                <!-- File info banner -->
+                <div class="card full-width" id="summary_file_banner">
+                    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+                        <div style="display:flex; align-items:center; gap:14px;">
+                            <div style="font-size:2.2em;">📄</div>
+                            <div>
+                                <div style="font-size:1.1em; font-weight:700; color:#e0e6ff;" id="summary_filename">—</div>
+                                <div style="font-size:0.82em; color:#8b9dc3;" id="summary_rowcount">— hourly rows</div>
+                            </div>
+                        </div>
+                        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                            <span id="summary_status_badge" style="background:rgba(56,239,125,0.15); border:1px solid rgba(56,239,125,0.4); color:#38ef7d; border-radius:20px; padding:6px 16px; font-size:0.82em; font-weight:700;">✅ Loaded</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Key metrics grid -->
+                <div class="card full-width">
+                    <h2>⚡ Key Meteorological Statistics</h2>
+                    <div class="results-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:16px; margin-top:16px;">
+                        <div style="background:rgba(255,215,0,0.08); border:1px solid rgba(255,215,0,0.25); border-radius:12px; padding:18px; text-align:center;">
+                            <div style="font-size:0.75em; color:#a0a8d4; letter-spacing:1px; text-transform:uppercase; margin-bottom:8px;">☀️ Avg Solar Irradiance</div>
+                            <div style="font-size:2em; font-weight:700; color:#FFD700; font-family:'JetBrains Mono',monospace;" id="sum_avg_solar">—</div>
+                            <div style="font-size:0.78em; color:#8b9dc3; margin-top:4px;">kW/m²</div>
+                        </div>
+                        <div style="background:rgba(0,191,255,0.08); border:1px solid rgba(0,191,255,0.25); border-radius:12px; padding:18px; text-align:center;">
+                            <div style="font-size:0.75em; color:#a0a8d4; letter-spacing:1px; text-transform:uppercase; margin-bottom:8px;">🌬️ Avg Wind Speed</div>
+                            <div style="font-size:2em; font-weight:700; color:#00BFFF; font-family:'JetBrains Mono',monospace;" id="sum_avg_wind">—</div>
+                            <div style="font-size:0.78em; color:#8b9dc3; margin-top:4px;">m/s</div>
+                        </div>
+                        <div style="background:rgba(255,99,71,0.08); border:1px solid rgba(255,99,71,0.25); border-radius:12px; padding:18px; text-align:center;">
+                            <div style="font-size:0.75em; color:#a0a8d4; letter-spacing:1px; text-transform:uppercase; margin-bottom:8px;">⚡ Peak Load</div>
+                            <div style="font-size:2em; font-weight:700; color:#FF6347; font-family:'JetBrains Mono',monospace;" id="sum_peak_load">—</div>
+                            <div style="font-size:0.78em; color:#8b9dc3; margin-top:4px;">kW</div>
+                        </div>
+                        <div style="background:rgba(50,205,50,0.08); border:1px solid rgba(50,205,50,0.25); border-radius:12px; padding:18px; text-align:center;">
+                            <div style="font-size:0.75em; color:#a0a8d4; letter-spacing:1px; text-transform:uppercase; margin-bottom:8px;">📊 Average Load</div>
+                            <div style="font-size:2em; font-weight:700; color:#32CD32; font-family:'JetBrains Mono',monospace;" id="sum_avg_load">—</div>
+                            <div style="font-size:0.78em; color:#8b9dc3; margin-top:4px;">kW</div>
+                        </div>
+                        <div style="background:rgba(102,126,234,0.08); border:1px solid rgba(102,126,234,0.25); border-radius:12px; padding:18px; text-align:center;">
+                            <div style="font-size:0.75em; color:#a0a8d4; letter-spacing:1px; text-transform:uppercase; margin-bottom:8px;">🗓️ Annual Energy Demand</div>
+                            <div style="font-size:2em; font-weight:700; color:#a78bfa; font-family:'JetBrains Mono',monospace;" id="sum_annual">—</div>
+                            <div style="font-size:0.78em; color:#8b9dc3; margin-top:4px;">MWh/year</div>
+                        </div>
+                        <div style="background:rgba(167,139,250,0.08); border:1px solid rgba(167,139,250,0.25); border-radius:12px; padding:18px; text-align:center;">
+                            <div style="font-size:0.75em; color:#a0a8d4; letter-spacing:1px; text-transform:uppercase; margin-bottom:8px;">🔢 Data Points</div>
+                            <div style="font-size:2em; font-weight:700; color:#c4b5fd; font-family:'JetBrains Mono',monospace;" id="sum_rows">—</div>
+                            <div style="font-size:0.78em; color:#8b9dc3; margin-top:4px;">hourly rows</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Monthly breakdown chart -->
+                <div class="card full-width">
+                    <h2>📅 Monthly Energy Overview</h2>
+                    <p style="color:#8b9dc3; margin-bottom:16px;">Average solar irradiance, wind speed and load demand by month</p>
+                    <div id="summary_monthly_chart" class="chart-container" style="min-height:380px;"></div>
+                </div>
+
+                <!-- Solar profile viewer -->
+                <div class="card full-width" id="solar_profile_card">
+                    <h2>☀️ Solar Irradiance Profile Viewer</h2>
+                    <div class="input-row" style="margin-bottom: 20px;">
+                        <div class="input-group">
+                            <label>Select Day (1-365)</label>
+                            <input type="number" id="solar_profile_day" value="1" min="1" max="365" onchange="updateSolarProfile()">
+                        </div>
+                        <div class="input-group">
+                            <label>View Mode</label>
+                            <select id="solar_profile_mode" onchange="updateSolarProfile()">
+                                <option value="daily">Daily (24 hours)</option>
+                                <option value="weekly">Weekly (7 days)</option>
+                                <option value="monthly">Monthly (30 days)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="input-row" style="margin-bottom: 20px;">
+                        <div class="input-group">
+                            <label>Time Resolution</label>
+                            <select id="solar_profile_resolution" onchange="updateSolarProfile()">
+                                <option value="hourly">Hourly</option>
+                                <option value="6hourly">6-Hourly</option>
+                                <option value="daily">Daily Average</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label>Quick Jump</label>
+                            <select id="solar_quick_jump" onchange="jumpToSolarDay(this.value)">
+                                <option value="">-- Select Season --</option>
+                                <option value="1">Jan 1 (Winter)</option>
+                                <option value="91">Apr 1 (Spring)</option>
+                                <option value="182">Jul 1 (Summer)</option>
+                                <option value="274">Oct 1 (Autumn)</option>
+                                <option value="355">Dec 21 (Winter Solstice)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="solar_profile_chart" class="chart-container" style="min-height: 500px;"></div>
+                    <div class="info-box" style="margin-top: 15px;">
+                        <p id="solar_profile_stats"><strong>Statistics will appear after viewing profile</strong></p>
+                    </div>
+                </div>
+
+                <!-- Wind profile viewer -->
+                <div class="card full-width" id="wind_profile_card">
+                    <h2>🌬️ Wind Speed Profile Viewer</h2>
+                    <div class="input-row" style="margin-bottom: 20px;">
+                        <div class="input-group">
+                            <label>Select Day (1-365)</label>
+                            <input type="number" id="wind_profile_day" value="1" min="1" max="365" onchange="updateWindProfile()">
+                        </div>
+                        <div class="input-group">
+                            <label>View Mode</label>
+                            <select id="wind_profile_mode" onchange="updateWindProfile()">
+                                <option value="daily">Daily (24 hours)</option>
+                                <option value="weekly">Weekly (7 days)</option>
+                                <option value="monthly">Monthly (30 days)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="input-row" style="margin-bottom: 20px;">
+                        <div class="input-group">
+                            <label>Time Resolution</label>
+                            <select id="wind_profile_resolution" onchange="updateWindProfile()">
+                                <option value="hourly">Hourly</option>
+                                <option value="6hourly">6-Hourly</option>
+                                <option value="daily">Daily Average</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label>Quick Jump</label>
+                            <select id="wind_quick_jump" onchange="jumpToWindDay(this.value)">
+                                <option value="">-- Select Season --</option>
+                                <option value="1">Jan 1 (Winter)</option>
+                                <option value="91">Apr 1 (Spring)</option>
+                                <option value="182">Jul 1 (Summer)</option>
+                                <option value="274">Oct 1 (Autumn)</option>
+                                <option value="355">Dec 21 (Winter Solstice)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="wind_profile_chart" class="chart-container" style="min-height: 500px;"></div>
+                    <div class="info-box" style="margin-top: 15px;">
+                        <p id="wind_profile_stats"><strong>Statistics will appear after viewing profile</strong></p>
+                    </div>
+                </div>
+
+                <!-- Pillar scores card -->
+                <div class="card full-width" id="pillar_scores_card" style="display:none;">
+                    <h2>🏛️ MPBSI Pillar Scores (from Uploaded Data)</h2>
+                    <div class="info-box" style="background:rgba(56,239,125,0.1); border-left:4px solid #38ef7d;">
+                        <p style="color:#38ef7d; font-weight:600;">✨ Initial pillar assessment from your uploaded data (before optimization)</p>
+                    </div>
+                    <div class="results-grid" id="pillar_scores_display" style="margin:20px 0;"></div>
+                    <div id="pillar_chart" class="chart-container" style="min-height:400px;"></div>
+                </div>
+
+            </div><!-- /summary_content -->
+        </div>
+
+        <!-- OPTIMIZE TAB -->
+        <div id="optimize" class="tab-content">
+
+            <div class="card">
+                <button class="collapsible" onclick="toggleCollapsible(this)">⚙️ MPBSI Weights</button>
+                <div class="collapsible-content">
+                    <div class="info-box" style="background: rgba(56, 239, 125, 0.1); border-left: 4px solid #38ef7d; margin-bottom: 15px;">
+                        <p><strong>💡 Auto-Optimize:</strong> Click button below to automatically adjust weights for maximum MPBSI score</p>
+                        <button onclick="autoOptimizeWeights()" style="background: linear-gradient(135deg, #38ef7d 0%, #11998e 100%); color: #fff; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; margin-top: 10px; width: 100%;">
+                            🎯 Auto-Optimize Weights for Max MPBSI
+                        </button>
+                    </div>
+                    <div class="input-row" style="margin-top: 15px;">
+                        <div class="input-group">
+                            <label>TRI: Technical Reliability</label>
+                            <input type="number" id="w_tri" value="0.30" min="0" max="1" step="0.01" onchange="updateWeightSum()">
+                        </div>
+                        <div class="input-group">
+                            <label>ORI: Operational Resilience</label>
+                            <input type="number" id="w_ori" value="0.25" min="0" max="1" step="0.01" onchange="updateWeightSum()">
+                        </div>
+                    </div>
+                    <div class="input-row">
+                        <div class="input-group">
+                            <label>LSI: Logistics Sustainability</label>
+                            <input type="number" id="w_lsi" value="0.20" min="0" max="1" step="0.01" onchange="updateWeightSum()">
+                        </div>
+                        <div class="input-group">
+                            <label>ESI: Environmental</label>
+                            <input type="number" id="w_esi" value="0.15" min="0" max="1" step="0.01" onchange="updateWeightSum()">
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <label>EcSI: Economic</label>
+                        <input type="number" id="w_ecsi" value="0.10" min="0" max="1" step="0.01" onchange="updateWeightSum()">
+                    </div>
+                    <p id="weight_sum" style="margin-top: 15px; font-weight: bold;"></p>
+                </div>
+            </div>
+
+            <div class="card">
+                <button class="collapsible" onclick="toggleCollapsible(this)">💰 Component Costs &amp; Financial Parameters</button>
+                <div class="collapsible-content">
+                    <p style="color:#a0a8d4;font-size:0.85em;margin:10px 0 6px;">Capital costs match Python backend defaults.</p>
+                    <div class="input-row" style="margin-top:8px;">
+                        <div class="input-group">
+                            <label>PV (₹/kWp)</label>
+                            <input type="number" id="cost_pv" value="55000" step="1000">
+                        </div>
+                        <div class="input-group">
+                            <label>Wind (₹/kW)</label>
+                            <input type="number" id="cost_wind" value="120000" step="1000">
+                        </div>
+                    </div>
+                    <div class="input-row">
+                        <div class="input-group">
+                            <label>Battery (₹/kWh)</label>
+                            <input type="number" id="cost_battery" value="22000" step="1000">
+                        </div>
+                        <div class="input-group">
+                            <label>Fuel Cell (₹/kW)</label>
+                            <input type="number" id="cost_fc" value="110000" step="1000">
+                        </div>
+                    </div>
+                    <div class="input-row">
+                        <div class="input-group">
+                            <label>Electrolyzer (₹/kW)</label>
+                            <input type="number" id="cost_elec" value="70000" step="1000">
+                        </div>
+                        <div class="input-group">
+                            <label>H2 Storage (₹/kWh)</label>
+                            <input type="number" id="cost_h2" value="80000" step="1000">
+                        </div>
+                    </div>
+                    <hr style="border-color:rgba(102,126,234,0.2);margin:12px 0;">
+                    <div class="input-row">
+                        <div class="input-group">
+                            <label>Discount Rate (%/yr)</label>
+                            <input type="number" id="fp_discount" value="8" min="1" max="20" step="0.5">
+                        </div>
+                        <div class="input-group">
+                            <label>Project Lifetime (yrs)</label>
+                            <input type="number" id="fp_lifetime" value="20" min="10" max="30" step="1">
+                        </div>
+                    </div>
+                    <div class="input-row">
+                        <div class="input-group">
+                            <label>O&amp;M Rate (% CAPEX/yr)</label>
+                            <input type="number" id="fp_om_rate" value="2" min="0.5" max="5" step="0.5">
+                        </div>
+                        <div class="input-group">
+                            <label>Battery Replacement (yr)</label>
+                            <input type="number" id="fp_bat_replace" value="10" min="5" max="15" step="1">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <button class="collapsible" onclick="toggleCollapsible(this)">🎯 System Constraints</button>
+                <div class="collapsible-content">
+                    <div class="input-row" style="margin-top: 15px;">
+                        <div class="input-group">
+                            <label>Minimum Autonomy (days)</label>
+                            <input type="number" id="min_autonomy" value="10" min="5" max="30" step="1" onchange="updateConstraintInfo()">
+                            <p style="color: #8b9dc3; font-size: 0.85em; margin-top: 5px;">Research paper: 10 days</p>
+                        </div>
+                        <div class="input-group">
+                            <label>Maximum LPSP Critical (%)</label>
+                            <input type="number" id="max_lpsp" value="0.1" min="0" max="5" step="0.1" readonly>
+                            <p style="color: #8b9dc3; font-size: 0.85em; margin-top: 5px;">Fixed: 0.1% (zero tolerance)</p>
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <label>Minimum RES Adequacy Ratio</label>
+                        <input type="number" id="min_res_adequacy" value="1.0" min="1.0" max="2.0" step="0.1" readonly>
+                        <p style="color: #8b9dc3; font-size: 0.85em; margin-top: 5px;">Fixed: 1.0 (100% renewable)</p>
+                    </div>
+                    <div class="info-box" id="constraint_info" style="margin-top: 15px;">
+                        <p><strong>Current Constraints:</strong></p>
+                        <p>✓ Minimum Autonomy: <strong id="constraint_autonomy">10 days</strong></p>
+                        <p>✓ Critical Load LPSP: <strong>&lt; 0.1%</strong></p>
+                        <p>✓ RES Adequacy: <strong>≥ 1.0</strong></p>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- RUNNING TAB -->
+        <div id="running" class="tab-content">
+            <div class="card full-width" id="running_card">
+                <div style="text-align:center; padding:20px 0 10px;">
+                    <div id="running_algo_badge" style="display:inline-block; background:linear-gradient(135deg,rgba(102,126,234,0.3),rgba(118,75,162,0.3)); border:1px solid rgba(102,126,234,0.5); border-radius:30px; padding:8px 24px; font-size:1em; font-weight:700; color:#a78bfa; letter-spacing:2px; text-transform:uppercase; margin-bottom:18px;">PSO Optimization</div>
+                    <div style="margin-bottom:24px;">
+                        <div id="running_spinner" style="width:70px; height:70px; border:4px solid rgba(102,126,234,0.15); border-top:4px solid #667eea; border-radius:50%; animation:spin 0.9s linear infinite; margin:0 auto 16px;"></div>
+                        <div id="running_title" style="font-size:1.6em; font-weight:700; color:#e0e6ff; margin-bottom:6px;">Optimizing...</div>
+                        <div id="running_subtitle" style="color:#8b9dc3; font-size:0.9em;">Python backend is running the MPBSI pipeline</div>
+                    </div>
+                </div>
+
+                <!-- Progress bar -->
+                <div style="margin:0 auto 28px; max-width:560px;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                        <span style="font-size:0.82em; color:#a0a8d4; font-weight:600;">PROGRESS</span>
+                        <span id="running_pct" style="font-size:0.82em; color:#667eea; font-weight:700;">—</span>
+                    </div>
+                    <div style="height:8px; background:rgba(255,255,255,0.07); border-radius:8px; overflow:hidden;">
+                        <div id="running_bar" style="height:100%; width:0%; background:linear-gradient(90deg,#667eea,#38ef7d); border-radius:8px; transition:width 0.6s ease;"></div>
+                    </div>
+                </div>
+
+                <!-- Step indicators -->
+                <div style="max-width:640px; margin:0 auto 28px;" id="running_steps">
+                    <div style="font-size:0.75em; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:rgba(167,139,250,0.7); margin-bottom:14px;">PIPELINE STEPS</div>
+                    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px;" id="running_step_grid">
+                    </div>
+                </div>
+
+                <!-- Live log -->
+                <div style="max-width:640px; margin:0 auto;">
+                    <div style="font-size:0.75em; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:rgba(167,139,250,0.7); margin-bottom:10px;">LIVE LOG</div>
+                    <div id="running_log" style="background:rgba(5,8,20,0.8); border:1px solid rgba(102,126,234,0.2); border-radius:12px; padding:14px 16px; height:160px; overflow-y:auto; font-family:JetBrains Mono,monospace; font-size:0.78em; color:#8b9dc3; line-height:1.7;">
+                        <div style="color:#667eea;">▶ Waiting for backend...</div>
+                    </div>
+                </div>
+
+                <!-- Done state (hidden until complete) -->
+                <div id="running_done" style="display:none; text-align:center; margin-top:28px;">
+                    <div style="font-size:2.5em; margin-bottom:10px;">🏆</div>
+                    <div style="color:#38ef7d; font-size:1.3em; font-weight:700; margin-bottom:6px;">Optimization Complete!</div>
+                    <div style="color:#8b9dc3; font-size:0.9em; margin-bottom:18px;">Switching to results...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RESULTS TAB -->
+        <div id="results" class="tab-content">
+            <div id="results_container">
+                <div class="card full-width">
+                    <h2>📊 Results</h2>
+                    <div class="info-box">
+                        <p>Run optimization to see results here...</p>
+                    </div>
+                </div>
+            </div>
+            
+        </div>
+
+        <!-- GRAPHS TAB -->
+        <div id="graphs" class="tab-content">
+            <div id="graphs_container">
+                <div class="card full-width">
+                    <h2>📈 Visualization Dashboard</h2>
+                    <div class="info-box">
+                        <p>Comprehensive visualization of optimization results and meteorological data</p>
+                        <p style="color: #38ef7d; margin-top: 10px;">💡 <strong>Note:</strong> Solar & Wind profile viewers are available in the Results tab after running optimization</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- PILLARS TAB -->
+        <div id="pillars" class="tab-content">
+            <div class="card full-width">
+                <h2>🏛️ MPBSI Framework - Five Sustainability Pillars</h2>
+                <div class="info-box">
+                    <p>The MPBSI integrates five sustainability dimensions to evaluate grid-independent renewable microgrids.</p>
+                    <p><strong>Note:</strong> Percentages shown reflect current weight allocation. Adjust weights in the Optimize tab.</p>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2 data-pillar="TRI">TRI: Technical Reliability Index (<span class="pillar-weight" id="tri-weight">30</span>%)</h2>
+                <div style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; text-align: center; margin: 15px 0; font-family: monospace;">
+                    TRI = 0.25×LPSP + 0.25×Autonomy + 0.25×Availability + 0.25×Storage
+                </div>
+                <div class="info-box">
+                    <p><strong>LPSP Score:</strong> (1 - LPSP_total) × 100</p>
+                    <p><strong>Autonomy Score:</strong> min(100, autonomy_days / 10.5 × 100)</p>
+                    <p><strong>Availability:</strong> (1 - LPSP_total) × 100</p>
+                    <p><strong>Storage Margin:</strong> (Battery + H₂) / (Peak × 7 days)</p>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2 data-pillar="ORI">ORI: Operational Resilience Index (<span class="pillar-weight" id="ori-weight">25</span>%)</h2>
+                <div style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; text-align: center; margin: 15px 0; font-family: monospace;">
+                    ORI = 0.30×Critical + 0.30×Decentral + 0.20×Signature + 0.20×Blackstart
+                </div>
+                <div class="info-box">
+                    <p><strong>Critical Survivability:</strong> (1 - LPSP_critical) × 100</p>
+                    <p><strong>Decentralization:</strong> PV(33%) + Wind(33%) + Battery(17%) + H₂(17%)</p>
+                    <p><strong>Low Signature:</strong> 95 (no diesel = quiet operation)</p>
+                    <p><strong>Black-start:</strong> 100 if Battery+H₂, else 70</p>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2 data-pillar="LSI">LSI: Logistics Sustainability Index (<span class="pillar-weight" id="lsi-weight">20</span>%)</h2>
+                <div style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; text-align: center; margin: 15px 0; font-family: monospace;">
+                    LSI = 0.25×Fuel + 0.20×Autonomy + 0.20×Maint + 0.15×Storage + 0.20×Supply
+                </div>
+                <div class="info-box">
+                    <p><strong>Fuel Elimination:</strong> 100 (no fuel transport)</p>
+                    <p><strong>Autonomy Support:</strong> min(100, autonomy / 10.5 × 100)</p>
+                    <p><strong>Maintenance:</strong> 90 (renewable = low maintenance)</p>
+                    <p><strong>Storage Life:</strong> 85 (battery + H₂ durability)</p>
+                    <p><strong>Supply Chain:</strong> 90 (local renewable resources)</p>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2 data-pillar="ESI">ESI: Environmental Sustainability Index (<span class="pillar-weight" id="esi-weight">15</span>%)</h2>
+                <div style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; text-align: center; margin: 15px 0; font-family: monospace;">
+                    ESI = 0.30×Emission + 0.25×RES + 0.25×Storage + 0.20×Lifecycle
+                </div>
+                <div class="info-box">
+                    <p><strong>Emission Avoidance:</strong> 100 (zero emissions)</p>
+                    <p><strong>RES Penetration:</strong> min(100, RES_gen / Load × 100)</p>
+                    <p><strong>Storage Utilization:</strong> (Battery + H₂) / (RES × 0.3)</p>
+                    <p><strong>Lifecycle:</strong> 85 (battery sustainability)</p>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2 data-pillar="EcSI">EcSI: Economic Sustainability Index (<span class="pillar-weight" id="ecsi-weight">10</span>%)</h2>
+                <div style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; text-align: center; margin: 15px 0; font-family: monospace;">
+                    EcSI = max(0, min(1, 1 - LCOE / 42))
+                </div>
+                <div class="info-box">
+                    <p><strong>LCOE Calculation:</strong></p>
+                    <p>CAPEX = Σ(Component × Cost)</p>
+                    <p>Annual O&M = CAPEX × 2%</p>
+                    <p>LCOE = (CAPEX + O&M × 20 years) / (Load × 20 years)</p>
+                    <p><strong>Threshold:</strong> ₹42/kWh (≈ $0.50/kWh)</p>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Overall MPBSI Calculation</h2>
+                <div style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; text-align: center; margin: 15px 0; font-family: monospace;">
+                    MPBSI = <span id="formula-tri">0.30</span>×TRI + <span id="formula-ori">0.25</span>×ORI + <span id="formula-lsi">0.20</span>×LSI + <span id="formula-esi">0.15</span>×ESI + <span id="formula-ecsi">0.10</span>×EcSI
+                </div>
+                <div class="info-box">
+                    <p><strong>Interpretation:</strong></p>
+                    <p><strong>0.85 - 1.00:</strong> Excellent (Deploy with confidence)</p>
+                    <p><strong>0.75 - 0.85:</strong> Very Good (Minor tweaks)</p>
+                    <p><strong>0.65 - 0.75:</strong> Good (Review weak pillars)</p>
+                    <p><strong>0.55 - 0.65:</strong> Acceptable (Improvements needed)</p>
+                    <p><strong>&lt; 0.55:</strong> Poor (Redesign required)</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        // ══════════════════════════════════════════════════════════════════
+        //  MPBSI UI CONTROLLER — Pure interface logic, no computations
+        //  All scientific computation handled by Python backend (mpbsi_backend.py)
+        //  Communication via: window.MPBSI_API (injected by Streamlit bridge)
+        // ══════════════════════════════════════════════════════════════════
+
+        // ── Research configuration ──
+        let MIN_AUTONOMY_DAYS = 10;
+
+        // ── Location Database (130+ cities across all Indian states) ──
+        const locationDatabase = {
+            // NORTHERN INDIA
+            'Jammu & Kashmir': {
+                srinagar: { name: 'Srinagar', zone: 'Jammu & Kashmir', alt: 1585, solar: 5.2, wind: 4.5 },
+                jammu: { name: 'Jammu', zone: 'Jammu & Kashmir', alt: 300, solar: 5.4, wind: 3.8 },
+                leh: { name: 'Leh-Ladakh', zone: 'Jammu & Kashmir', alt: 3500, solar: 5.5, wind: 6.0 },
+                kargil: { name: 'Kargil', zone: 'Jammu & Kashmir', alt: 2676, solar: 5.3, wind: 5.5 }
+            },
+            'Himachal Pradesh': {
+                shimla: { name: 'Shimla', zone: 'Himachal Pradesh', alt: 2206, solar: 5.0, wind: 5.5 },
+                manali: { name: 'Manali', zone: 'Himachal Pradesh', alt: 2050, solar: 4.9, wind: 5.2 },
+                dharamshala: { name: 'Dharamshala', zone: 'Himachal Pradesh', alt: 1457, solar: 4.8, wind: 4.8 },
+                kullu: { name: 'Kullu', zone: 'Himachal Pradesh', alt: 1279, solar: 4.7, wind: 4.5 }
+            },
+            'Punjab': {
+                chandigarh: { name: 'Chandigarh', zone: 'Punjab', alt: 321, solar: 5.1, wind: 3.5 },
+                amritsar: { name: 'Amritsar', zone: 'Punjab', alt: 234, solar: 5.2, wind: 3.8 },
+                ludhiana: { name: 'Ludhiana', zone: 'Punjab', alt: 247, solar: 5.0, wind: 3.6 },
+                jalandhar: { name: 'Jalandhar', zone: 'Punjab', alt: 228, solar: 5.1, wind: 3.7 }
+            },
+            'Haryana': {
+                gurugram: { name: 'Gurugram', zone: 'Haryana', alt: 217, solar: 5.3, wind: 3.5 },
+                faridabad: { name: 'Faridabad', zone: 'Haryana', alt: 198, solar: 5.2, wind: 3.4 },
+                panipat: { name: 'Panipat', zone: 'Haryana', alt: 226, solar: 5.1, wind: 3.6 },
+                ambala: { name: 'Ambala', zone: 'Haryana', alt: 276, solar: 5.0, wind: 3.5 }
+            },
+            'Uttarakhand': {
+                dehradun: { name: 'Dehradun', zone: 'Uttarakhand', alt: 640, solar: 4.8, wind: 3.5 },
+                nainital: { name: 'Nainital', zone: 'Uttarakhand', alt: 2084, solar: 4.6, wind: 4.8 },
+                mussoorie: { name: 'Mussoorie', zone: 'Uttarakhand', alt: 2005, solar: 4.7, wind: 4.9 },
+                haridwar: { name: 'Haridwar', zone: 'Uttarakhand', alt: 314, solar: 4.9, wind: 3.2 }
+            },
+            'Delhi': {
+                newdelhi: { name: 'New Delhi', zone: 'Delhi', alt: 216, solar: 5.2, wind: 3.2 },
+                eastdelhi: { name: 'East Delhi', zone: 'Delhi', alt: 213, solar: 5.2, wind: 3.1 },
+                westdelhi: { name: 'West Delhi', zone: 'Delhi', alt: 220, solar: 5.1, wind: 3.0 }
+            },
+            
+            // WESTERN INDIA
+            'Rajasthan': {
+                jaipur: { name: 'Jaipur', zone: 'Rajasthan', alt: 431, solar: 5.8, wind: 4.5 },
+                jodhpur: { name: 'Jodhpur', zone: 'Rajasthan', alt: 231, solar: 5.9, wind: 6.5 },
+                jaisalmer: { name: 'Jaisalmer', zone: 'Rajasthan', alt: 229, solar: 6.2, wind: 7.5 },
+                bikaner: { name: 'Bikaner', zone: 'Rajasthan', alt: 228, solar: 6.0, wind: 6.8 },
+                udaipur: { name: 'Udaipur', zone: 'Rajasthan', alt: 598, solar: 5.7, wind: 5.2 },
+                kota: { name: 'Kota', zone: 'Rajasthan', alt: 271, solar: 5.6, wind: 4.8 }
+            },
+            'Gujarat': {
+                ahmedabad: { name: 'Ahmedabad', zone: 'Gujarat', alt: 53, solar: 5.6, wind: 4.2 },
+                surat: { name: 'Surat', zone: 'Gujarat', alt: 13, solar: 5.5, wind: 4.0 },
+                vadodara: { name: 'Vadodara', zone: 'Gujarat', alt: 39, solar: 5.4, wind: 3.8 },
+                rajkot: { name: 'Rajkot', zone: 'Gujarat', alt: 134, solar: 5.7, wind: 4.5 },
+                kutch: { name: 'Kutch', zone: 'Gujarat', alt: 15, solar: 5.8, wind: 8.2 },
+                gandhinagar: { name: 'Gandhinagar', zone: 'Gujarat', alt: 81, solar: 5.5, wind: 4.1 }
+            },
+            'Maharashtra': {
+                mumbai: { name: 'Mumbai', zone: 'Maharashtra', alt: 14, solar: 5.2, wind: 4.8 },
+                pune: { name: 'Pune', zone: 'Maharashtra', alt: 560, solar: 5.3, wind: 4.5 },
+                nagpur: { name: 'Nagpur', zone: 'Maharashtra', alt: 310, solar: 5.5, wind: 4.0 },
+                nashik: { name: 'Nashik', zone: 'Maharashtra', alt: 565, solar: 5.4, wind: 4.2 },
+                aurangabad: { name: 'Aurangabad', zone: 'Maharashtra', alt: 568, solar: 5.5, wind: 4.3 },
+                thane: { name: 'Thane', zone: 'Maharashtra', alt: 7, solar: 5.1, wind: 4.6 }
+            },
+            'Goa': {
+                panaji: { name: 'Panaji', zone: 'Goa', alt: 7, solar: 5.3, wind: 4.5 },
+                margao: { name: 'Margao', zone: 'Goa', alt: 22, solar: 5.2, wind: 4.4 },
+                vasco: { name: 'Vasco da Gama', zone: 'Goa', alt: 5, solar: 5.3, wind: 4.6 }
+            },
+            
+            // EASTERN INDIA
+            'West Bengal': {
+                kolkata: { name: 'Kolkata', zone: 'West Bengal', alt: 9, solar: 4.9, wind: 4.2 },
+                darjeeling: { name: 'Darjeeling', zone: 'West Bengal', alt: 2042, solar: 4.5, wind: 5.5 },
+                siliguri: { name: 'Siliguri', zone: 'West Bengal', alt: 122, solar: 4.7, wind: 3.8 },
+                durgapur: { name: 'Durgapur', zone: 'West Bengal', alt: 65, solar: 4.8, wind: 3.9 }
+            },
+            'Odisha': {
+                bhubaneswar: { name: 'Bhubaneswar', zone: 'Odisha', alt: 45, solar: 5.1, wind: 4.8 },
+                cuttack: { name: 'Cuttack', zone: 'Odisha', alt: 36, solar: 5.0, wind: 4.7 },
+                puri: { name: 'Puri', zone: 'Odisha', alt: 3, solar: 5.2, wind: 5.2 },
+                rourkela: { name: 'Rourkela', zone: 'Odisha', alt: 219, solar: 4.9, wind: 4.5 }
+            },
+            'Bihar': {
+                patna: { name: 'Patna', zone: 'Bihar', alt: 53, solar: 4.8, wind: 3.5 },
+                gaya: { name: 'Gaya', zone: 'Bihar', alt: 116, solar: 4.9, wind: 3.6 },
+                bhagalpur: { name: 'Bhagalpur', zone: 'Bihar', alt: 46, solar: 4.8, wind: 3.4 },
+                muzaffarpur: { name: 'Muzaffarpur', zone: 'Bihar', alt: 47, solar: 4.7, wind: 3.3 }
+            },
+            'Jharkhand': {
+                ranchi: { name: 'Ranchi', zone: 'Jharkhand', alt: 651, solar: 4.9, wind: 4.2 },
+                jamshedpur: { name: 'Jamshedpur', zone: 'Jharkhand', alt: 135, solar: 5.0, wind: 4.0 },
+                dhanbad: { name: 'Dhanbad', zone: 'Jharkhand', alt: 245, solar: 4.8, wind: 3.8 },
+                bokaro: { name: 'Bokaro', zone: 'Jharkhand', alt: 210, solar: 4.9, wind: 3.9 }
+            },
+            'Sikkim': {
+                gangtok: { name: 'Gangtok', zone: 'Sikkim', alt: 1650, solar: 4.5, wind: 5.0 },
+                pelling: { name: 'Pelling', zone: 'Sikkim', alt: 2150, solar: 4.4, wind: 5.2 },
+                namchi: { name: 'Namchi', zone: 'Sikkim', alt: 1675, solar: 4.5, wind: 4.9 }
+            },
+            'Assam': {
+                guwahati: { name: 'Guwahati', zone: 'Assam', alt: 55, solar: 4.6, wind: 3.8 },
+                dibrugarh: { name: 'Dibrugarh', zone: 'Assam', alt: 111, solar: 4.5, wind: 3.6 },
+                silchar: { name: 'Silchar', zone: 'Assam', alt: 22, solar: 4.6, wind: 3.7 },
+                tezpur: { name: 'Tezpur', zone: 'Assam', alt: 79, solar: 4.5, wind: 3.5 }
+            },
+            'Meghalaya': {
+                shillong: { name: 'Shillong', zone: 'Meghalaya', alt: 1496, solar: 4.3, wind: 6.5 },
+                cherrapunji: { name: 'Cherrapunji', zone: 'Meghalaya', alt: 1484, solar: 4.2, wind: 6.8 },
+                tura: { name: 'Tura', zone: 'Meghalaya', alt: 337, solar: 4.4, wind: 5.5 }
+            },
+            'Arunachal Pradesh': {
+                itanagar: { name: 'Itanagar', zone: 'Arunachal Pradesh', alt: 350, solar: 4.4, wind: 4.0 },
+                tawang: { name: 'Tawang', zone: 'Arunachal Pradesh', alt: 3048, solar: 4.6, wind: 6.2 },
+                pasighat: { name: 'Pasighat', zone: 'Arunachal Pradesh', alt: 155, solar: 4.5, wind: 3.8 }
+            },
+            'Nagaland': {
+                kohima: { name: 'Kohima', zone: 'Nagaland', alt: 1444, solar: 4.3, wind: 4.8 },
+                dimapur: { name: 'Dimapur', zone: 'Nagaland', alt: 167, solar: 4.4, wind: 4.2 }
+            },
+            'Manipur': {
+                imphal: { name: 'Imphal', zone: 'Manipur', alt: 786, solar: 4.5, wind: 4.5 },
+                churachandpur: { name: 'Churachandpur', zone: 'Manipur', alt: 914, solar: 4.4, wind: 4.6 }
+            },
+            'Mizoram': {
+                aizawl: { name: 'Aizawl', zone: 'Mizoram', alt: 1132, solar: 4.4, wind: 5.0 },
+                lunglei: { name: 'Lunglei', zone: 'Mizoram', alt: 722, solar: 4.5, wind: 4.8 }
+            },
+            'Tripura': {
+                agartala: { name: 'Agartala', zone: 'Tripura', alt: 12, solar: 4.6, wind: 3.5 },
+                udaipur: { name: 'Udaipur (Tripura)', zone: 'Tripura', alt: 23, solar: 4.5, wind: 3.4 }
+            },
+            
+            // SOUTHERN INDIA
+            'Tamil Nadu': {
+                chennai: { name: 'Chennai', zone: 'Tamil Nadu', alt: 7, solar: 5.4, wind: 5.5 },
+                coimbatore: { name: 'Coimbatore', zone: 'Tamil Nadu', alt: 411, solar: 5.3, wind: 5.5 },
+                madurai: { name: 'Madurai', zone: 'Tamil Nadu', alt: 134, solar: 5.5, wind: 5.2 },
+                tiruchirappalli: { name: 'Tiruchirappalli', zone: 'Tamil Nadu', alt: 88, solar: 5.4, wind: 5.0 },
+                salem: { name: 'Salem', zone: 'Tamil Nadu', alt: 278, solar: 5.3, wind: 5.1 },
+                tirunelveli: { name: 'Tirunelveli', zone: 'Tamil Nadu', alt: 47, solar: 5.6, wind: 5.8 },
+                kanyakumari: { name: 'Kanyakumari', zone: 'Tamil Nadu', alt: 30, solar: 5.4, wind: 7.8 },
+                rameshwaram: { name: 'Rameshwaram', zone: 'Tamil Nadu', alt: 10, solar: 5.6, wind: 7.2 },
+                kodaikanal: { name: 'Kodaikanal', zone: 'Tamil Nadu', alt: 2133, solar: 5.2, wind: 6.0 }
+            },
+            'Karnataka': {
+                bangalore: { name: 'Bangalore', zone: 'Karnataka', alt: 920, solar: 5.2, wind: 4.2 },
+                mysore: { name: 'Mysore', zone: 'Karnataka', alt: 770, solar: 5.1, wind: 4.0 },
+                mangalore: { name: 'Mangalore', zone: 'Karnataka', alt: 22, solar: 4.9, wind: 4.8 },
+                hubli: { name: 'Hubli', zone: 'Karnataka', alt: 640, solar: 5.3, wind: 4.5 },
+                belgaum: { name: 'Belgaum', zone: 'Karnataka', alt: 751, solar: 5.2, wind: 4.3 },
+                gulbarga: { name: 'Gulbarga', zone: 'Karnataka', alt: 458, solar: 5.4, wind: 4.6 }
+            },
+            'Kerala': {
+                thiruvananthapuram: { name: 'Thiruvananthapuram', zone: 'Kerala', alt: 16, solar: 5.0, wind: 4.2 },
+                kochi: { name: 'Kochi', zone: 'Kerala', alt: 2, solar: 4.9, wind: 4.5 },
+                kozhikode: { name: 'Kozhikode', zone: 'Kerala', alt: 4, solar: 5.0, wind: 4.6 },
+                thrissur: { name: 'Thrissur', zone: 'Kerala', alt: 2, solar: 4.9, wind: 4.3 },
+                kollam: { name: 'Kollam', zone: 'Kerala', alt: 3, solar: 5.0, wind: 4.4 },
+                munnar: { name: 'Munnar', zone: 'Kerala', alt: 1600, solar: 4.8, wind: 5.2 }
+            },
+            'Andhra Pradesh': {
+                visakhapatnam: { name: 'Visakhapatnam', zone: 'Andhra Pradesh', alt: 5, solar: 5.3, wind: 5.5 },
+                vijayawada: { name: 'Vijayawada', zone: 'Andhra Pradesh', alt: 11, solar: 5.2, wind: 4.8 },
+                guntur: { name: 'Guntur', zone: 'Andhra Pradesh', alt: 33, solar: 5.3, wind: 4.7 },
+                tirupati: { name: 'Tirupati', zone: 'Andhra Pradesh', alt: 182, solar: 5.4, wind: 4.9 },
+                nellore: { name: 'Nellore', zone: 'Andhra Pradesh', alt: 18, solar: 5.5, wind: 5.2 }
+            },
+            'Telangana': {
+                hyderabad: { name: 'Hyderabad', zone: 'Telangana', alt: 505, solar: 5.3, wind: 4.5 },
+                warangal: { name: 'Warangal', zone: 'Telangana', alt: 302, solar: 5.4, wind: 4.6 },
+                nizamabad: { name: 'Nizamabad', zone: 'Telangana', alt: 442, solar: 5.3, wind: 4.4 },
+                karimnagar: { name: 'Karimnagar', zone: 'Telangana', alt: 264, solar: 5.2, wind: 4.3 }
+            },
+            'Puducherry': {
+                puducherry: { name: 'Puducherry', zone: 'Puducherry', alt: 3, solar: 5.3, wind: 5.0 },
+                karaikal: { name: 'Karaikal', zone: 'Puducherry', alt: 4, solar: 5.4, wind: 5.1 }
+            },
+            
+            // CENTRAL INDIA
+            'Madhya Pradesh': {
+                bhopal: { name: 'Bhopal', zone: 'Madhya Pradesh', alt: 523, solar: 5.3, wind: 3.8 },
+                indore: { name: 'Indore', zone: 'Madhya Pradesh', alt: 553, solar: 5.4, wind: 4.2 },
+                gwalior: { name: 'Gwalior', zone: 'Madhya Pradesh', alt: 197, solar: 5.2, wind: 4.0 },
+                jabalpur: { name: 'Jabalpur', zone: 'Madhya Pradesh', alt: 411, solar: 5.1, wind: 3.9 },
+                ujjain: { name: 'Ujjain', zone: 'Madhya Pradesh', alt: 491, solar: 5.3, wind: 4.1 },
+                pachmarhi: { name: 'Pachmarhi', zone: 'Madhya Pradesh', alt: 1067, solar: 5.3, wind: 4.5 }
+            },
+            'Chhattisgarh': {
+                raipur: { name: 'Raipur', zone: 'Chhattisgarh', alt: 298, solar: 5.0, wind: 3.8 },
+                bhilai: { name: 'Bhilai', zone: 'Chhattisgarh', alt: 283, solar: 4.9, wind: 3.7 },
+                bilaspur: { name: 'Bilaspur', zone: 'Chhattisgarh', alt: 262, solar: 5.0, wind: 3.9 },
+                durg: { name: 'Durg', zone: 'Chhattisgarh', alt: 287, solar: 4.9, wind: 3.6 }
+            },
+            
+            // UNION TERRITORIES
+            'Andaman & Nicobar': {
+                portblair: { name: 'Port Blair', zone: 'Andaman & Nicobar', alt: 0, solar: 5.2, wind: 4.8 },
+                havelock: { name: 'Havelock Island', zone: 'Andaman & Nicobar', alt: 0, solar: 5.1, wind: 5.0 }
+            },
+            'Lakshadweep': {
+                kavaratti: { name: 'Kavaratti', zone: 'Lakshadweep', alt: 0, solar: 5.3, wind: 5.5 },
+                agatti: { name: 'Agatti', zone: 'Lakshadweep', alt: 0, solar: 5.2, wind: 5.6 }
+            },
+            'Dadra & Nagar Haveli': {
+                silvassa: { name: 'Silvassa', zone: 'Dadra & Nagar Haveli', alt: 30, solar: 5.2, wind: 3.8 }
+            },
+            'Daman & Diu': {
+                daman: { name: 'Daman', zone: 'Daman & Diu', alt: 5, solar: 5.3, wind: 4.5 },
+                diu: { name: 'Diu', zone: 'Daman & Diu', alt: 8, solar: 5.4, wind: 5.0 }
+            }
+        };
+
+        let currentLocation = locationDatabase['Jammu & Kashmir'].leh;
+        let uploadedData = {
+            solar: null, wind: null, load: null,
+            temp: null, press: null, humid: null,
+            avg_load: null, peak_load: null,
+            avg_ghi_kw: null, avg_wind: null,
+            complete: false
+        };
+        let optimizationResults = null;
+
+        // ── Initialise UI ──
+        updateWeightSum();
+        updateConstraintInfo();
+        updateLocations();
+
+        // ══════════════════════════════════════════════════════════════════
+        //  TAB SWITCHING
+        // ══════════════════════════════════════════════════════════════════
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            const tabLabels = { data:'Data Upload', initial_sizing:'Initial Sizing', optimize:'Optimize', results:'Results',
+                                graphs:'Graphs', pillars:'Pillars' };
+            const targetLabel = tabLabels[tabName] || tabName;
+            document.querySelectorAll('.tab').forEach(tab => {
+                if (tab.textContent.trim().includes(targetLabel)) tab.classList.add('active');
+            });
+            const target = document.getElementById(tabName);
+            if (target) target.classList.add('active');
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        //  COLLAPSIBLE PANELS
+        // ══════════════════════════════════════════════════════════════════
+        function toggleCollapsible(button) {
+            button.classList.toggle('active');
+            const content = button.nextElementSibling;
+            content.style.maxHeight = content.style.maxHeight ? null : content.scrollHeight + 'px';
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        //  WEIGHT MANAGEMENT — UI display only, no computation
+        // ══════════════════════════════════════════════════════════════════
+        function updateWeightSum() {
+            try {
+                const w1 = parseFloat(document.getElementById('w_tri')?.value) || 0;
+                const w2 = parseFloat(document.getElementById('w_ori')?.value) || 0;
+                const w3 = parseFloat(document.getElementById('w_lsi')?.value) || 0;
+                const w4 = parseFloat(document.getElementById('w_esi')?.value) || 0;
+                const w5 = parseFloat(document.getElementById('w_ecsi')?.value) || 0;
+                const sum = (w1 + w2 + w3 + w4 + w5).toFixed(2);
+                const elem = document.getElementById('weight_sum');
+                if (elem) {
+                    elem.textContent = `Sum: ${sum}`;
+                    elem.style.color = Math.abs(sum - 1.0) < 0.01 ? '#38ef7d' : '#ff6b6b';
+                }
+                updatePillarPercentages(w1, w2, w3, w4, w5);
+            } catch (e) { console.error('updateWeightSum:', e); }
+        }
+
+        function updatePillarPercentages(w_tri, w_ori, w_lsi, w_esi, w_ecsi) {
+            const ids = { 'tri-weight': w_tri, 'ori-weight': w_ori, 'lsi-weight': w_lsi,
+                          'esi-weight': w_esi, 'ecsi-weight': w_ecsi };
+            Object.entries(ids).forEach(([id, w]) => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = (w * 100).toFixed(0);
+            });
+            const fIds = { 'formula-tri': w_tri, 'formula-ori': w_ori, 'formula-lsi': w_lsi,
+                           'formula-esi': w_esi, 'formula-ecsi': w_ecsi };
+            Object.entries(fIds).forEach(([id, w]) => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = w.toFixed(2);
+            });
+        }
+
+        function autoOptimizeWeights() {
+            const weights = { TRI: 0.30, ORI: 0.28, LSI: 0.22, ESI: 0.15, EcSI: 0.05 };
+            const fields = { TRI:'w_tri', ORI:'w_ori', LSI:'w_lsi', ESI:'w_esi', EcSI:'w_ecsi' };
+            Object.entries(fields).forEach(([k, id]) => {
+                const el = document.getElementById(id);
+                if (el) el.value = weights[k].toFixed(2);
+            });
+            updateWeightSum();
+            alert('✨ Weights optimized for maximum MPBSI!\n\nTRI:30% | ORI:28% | LSI:22% | ESI:15% | EcSI:5%\n\nNote: Computation runs in Python backend.');
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        //  CONSTRAINT UI
+        // ══════════════════════════════════════════════════════════════════
+        function updateConstraintInfo() {
+            try {
+                const autonomy = document.getElementById('min_autonomy')?.value || '10';
+                const el = document.getElementById('constraint_autonomy');
+                if (el) el.textContent = autonomy + ' days';
+                MIN_AUTONOMY_DAYS = parseInt(autonomy) || 10;
+            } catch(e) { console.error('updateConstraintInfo:', e); }
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        //  LOCATION MANAGEMENT — UI only
+        // ══════════════════════════════════════════════════════════════════
+        function updateLocations() {
+            try {
+                const zoneSelect = document.getElementById('zone_select');
+                const locationSelect = document.getElementById('location_select');
+                if (!zoneSelect || !locationSelect) return;
+                const zone = zoneSelect.value;
+                locationSelect.innerHTML = '';
+                Object.keys(locationDatabase[zone]).forEach(key => {
+                    const opt = document.createElement('option');
+                    opt.value = key;
+                    opt.textContent = locationDatabase[zone][key].name;
+                    locationSelect.appendChild(opt);
+                });
+                updateLocationDetails();
+            } catch(e) { console.error('updateLocations:', e); }
+        }
+
+        function updateLocationDetails() {
+            try {
+                const zone = document.getElementById('zone_select')?.value;
+                const key  = document.getElementById('location_select')?.value;
+                if (!zone || !key || !locationDatabase[zone]?.[key]) return;
+                const loc = locationDatabase[zone][key];
+                currentLocation = loc;
+                document.getElementById('loc_name').textContent = loc.name;
+                document.getElementById('loc_zone').textContent = loc.zone;
+                document.getElementById('loc_alt').textContent  = loc.alt;
+                document.getElementById('loc_solar').textContent = loc.solar;
+                document.getElementById('loc_wind').textContent  = loc.wind;
+                const ua = document.getElementById('altitude_input');
+                if (ua) {
+                    ua.value = loc.alt;
+                    document.getElementById('user_alt').textContent = loc.alt;
+                }
+            } catch(e) { console.error('updateLocationDetails:', e); }
+        }
+
+        function updateUserAltitude() {
+            const val = document.getElementById('altitude_input')?.value;
+            const el  = document.getElementById('user_alt');
+            if (el) el.textContent = val || '--';
+        }
+
+        function findLocationInDatabase(searchTerm) {
+            searchTerm = searchTerm.toLowerCase().replace(/[^a-z0-9]/g, '');
+            for (const state in locationDatabase) {
+                for (const key in locationDatabase[state]) {
+                    const loc = locationDatabase[state][key];
+                    const name = loc.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+                    if (name === searchTerm || key === searchTerm ||
+                        name.includes(searchTerm) || searchTerm.includes(name)) {
+                        return { state, key, ...loc };
+                    }
+                }
+            }
+            return null;
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        //  FILE UPLOAD — Parse and display statistics only
+        //  All physics computation delegated to Python backend
+        // ══════════════════════════════════════════════════════════════════
+        function onFileSelected(input) {
+            const btn = document.getElementById('submit_btn');
+            if (input.files?.length > 0) {
+                btn.disabled = false;
+                btn.style.opacity = '1';
+                btn.style.cursor = 'pointer';
+                document.getElementById('upload_status').innerHTML =
+                    '<p style="color:#FFD700;">📂 File selected: <strong>' + input.files[0].name + '</strong> — Click Submit to process</p>';
+            } else {
+                btn.disabled = true;
+                btn.style.opacity = '0.45';
+                btn.style.cursor = 'not-allowed';
+            }
+        }
+
+        function submitAndCalculate() {
+            const fileInput = document.getElementById('file_input');
+            if (!fileInput?.files?.length) {
+                alert('Please select a file first.');
+                return;
+            }
+            const file = fileInput.files[0];
+            const ext  = file.name.split('.').pop().toLowerCase();
+
+            showLoading('Parsing file...');
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    let rows;
+                    if (ext === 'csv') {
+                        const parsed = Papa.parse(e.target.result, { header: true, dynamicTyping: true, skipEmptyLines: true });
+                        rows = parsed.data;
+                    } else {
+                        const wb = XLSX.read(e.target.result, { type: 'array' });
+                        rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+                    }
+                    processUploadedRows(rows, file.name);
+                } catch(err) {
+                    hideLoading();
+                    alert('Error parsing file: ' + err.message);
+                }
+            };
+            if (ext === 'csv') reader.readAsText(file);
+            else reader.readAsArrayBuffer(file);
+        }
+
+        function processUploadedRows(rows, filename) {
+            try {
+                // ── Detect columns (case-insensitive) ──
+                if (!rows || rows.length === 0) { alert('File is empty.'); hideLoading(); return; }
+                const sample = rows[0];
+                const keys   = Object.keys(sample);
+
+                // ── Robust column finder: try exact match first, then partial ──
+                const findCol = (...names) => {
+                    const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g,'');
+                    // 1st pass: exact normalised match
+                    for (const n of names) {
+                        const hit = keys.find(k => norm(k) === norm(n));
+                        if (hit) return hit;
+                    }
+                    // 2nd pass: starts-with
+                    for (const n of names) {
+                        const hit = keys.find(k => norm(k).startsWith(norm(n)));
+                        if (hit) return hit;
+                    }
+                    // 3rd pass: includes (most permissive — last resort)
+                    for (const n of names) {
+                        const hit = keys.find(k => norm(k).includes(norm(n)));
+                        if (hit) return hit;
+                    }
+                    return undefined;
+                };
+
+                // Priority order matches the backend's fuzzy column detection
+                const colSolar = findCol('GHI_Wh_m2','GHI_W_per_m2','GHI_kWh_m2','GHI','ghi',
+                                          'SolarGHI','solar_irradiance','Irradiance','Solar','solar');
+                const colWind  = findCol('WindSpeed_10m_mps','WindSpeed_mps','WindSpeed','Wind_Speed',
+                                          'wind_mps','wind_ms','Wind','wind','wind_speed');
+                const colLoad  = findCol('Load_kW','load_kW','Load_KW','Demand_kW','Power_kW',
+                                          'Load','load','Demand','Power','Consumption');
+
+                if (!colSolar || !colWind || !colLoad) {
+                    alert('Required columns not found.\nExpected: GHI_Wh_m2, WindSpeed_10m_mps, Load_kW\nFound: ' + keys.join(', '));
+                    hideLoading(); return;
+                }
+                console.log('Column mapping → GHI:', colSolar, '| Wind:', colWind, '| Load:', colLoad);
+
+                const N = rows.length;
+                const solar = rows.map(r => parseFloat(r[colSolar]) || 0);
+                const wind  = rows.map(r => parseFloat(r[colWind])  || 0);
+                const load  = rows.map(r => parseFloat(r[colLoad])  || 0);
+
+                // ── Unit auto-detection (mirrors mpbsi_backend.py exactly) ──
+                // GHI: if peak ≤ 10 → data is in kW/m² or kWh/m² → keep as kW/m² for display
+                //      if peak >  10 → data is in Wh/m²            → convert to kW/m² (/1000)
+                const solarPeak = Math.max(...solar.filter(v => isFinite(v)));
+                const solarIsWh = solarPeak > 10;           // true  → Wh/m²  → divide by 1000
+                const avgSolar  = solar.reduce((a,b)=>a+b,0) / N / (solarIsWh ? 1000 : 1);
+                // avgSolar is now always in kW/m²
+
+                // Load: column is expected in kW — no conversion needed
+                // Backend auto-detects but does NOT scale load values
+                const avgLoad  = load.reduce((a,b)=>a+b,0) / N;  // kW
+                const peakLoad = Math.max(...load.filter(v => isFinite(v)));
+
+                const avgWind  = wind.reduce((a,b)=>a+b,0) / N;
+
+                // Annual energy: avgLoad(kW) × N(hours) / 1000 = MWh
+                const annual   = avgLoad * N / 1000; // MWh
+
+                uploadedData = {
+                    solar, wind, load,
+                    avg_load: +avgLoad.toFixed(4), peak_load: +peakLoad.toFixed(4),
+                    avg_ghi_kw: +avgSolar.toFixed(6), avg_wind: +avgWind.toFixed(4),
+                    complete: true
+                };
+
+                // ── Update legacy display IDs (Optimize tab still uses these) ──
+                const setEl = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
+                const setVal = (id, val) => { const el = document.getElementById(id); if(el) el.value = val; };
+                setEl('calc_avg_solar',   avgSolar.toFixed(4));
+                setEl('calc_avg_wind',    avgWind.toFixed(2));
+                setEl('calc_peak_load',   peakLoad.toFixed(2));
+                setEl('calc_peak_load_2', peakLoad.toFixed(2));
+                setEl('calc_avg_load',    avgLoad.toFixed(2));
+                setEl('calc_avg_load_2',  avgLoad.toFixed(2));
+                setEl('calc_annual',      annual.toFixed(2));
+                setVal('peak_load_input', peakLoad.toFixed(2));
+                setVal('avg_load_input',  avgLoad.toFixed(2));
+                setVal('annual_demand',   annual.toFixed(2));
+
+                // ── Populate Summary tab ──
+                setEl('summary_filename', filename);
+                setEl('summary_rowcount', N + ' hourly rows');
+                setEl('sum_avg_solar',  avgSolar.toFixed(4));
+                setEl('sum_avg_wind',   avgWind.toFixed(2));
+                setEl('sum_peak_load',  peakLoad.toFixed(2));
+                setEl('sum_avg_load',   avgLoad.toFixed(2));
+                setEl('sum_annual',     annual.toFixed(2));
+                setEl('sum_rows',       N.toLocaleString());
+
+                // ── Build monthly breakdown chart ──
+                try {
+                    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                    const mDays  = [31,28,29,31,30,31,30,31,31,30,31,30]; // approx hours per month
+                    const mHours = mDays.map(d => d*24);
+                    let mSolar=[], mWind=[], mLoad=[];
+                    let offset=0;
+                    for(let m=0;m<12;m++){
+                        const h = Math.min(mHours[m], N-offset);
+                        if(h<=0){mSolar.push(0);mWind.push(0);mLoad.push(0);}
+                        else{
+                            const sl = solar.slice(offset,offset+h);
+                            const wl = wind.slice(offset,offset+h);
+                            const ll = load.slice(offset,offset+h);
+                            mSolar.push((sl.reduce((a,b)=>a+b,0)/h/(solarIsWh ? 1000 : 1)));
+                            mWind.push(wl.reduce((a,b)=>a+b,0)/h);
+                            mLoad.push(ll.reduce((a,b)=>a+b,0)/h);
+                        }
+                        offset += mHours[m];
+                    }
+                    if(typeof Plotly !== 'undefined'){
+                        const dark = { paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(10,12,35,0.6)',
+                                       font:{color:'#c8d0e8',family:'Space Grotesk'},
+                                       xaxis:{color:'#8b9dc3',gridcolor:'rgba(102,126,234,0.1)'},
+                                       yaxis:{color:'#8b9dc3',gridcolor:'rgba(102,126,234,0.12)',title:'kW or kW/m²'},
+                                       yaxis2:{overlaying:'y',side:'right',color:'#8b9dc3',
+                                               gridcolor:'rgba(0,0,0,0)',title:'m/s'},
+                                       legend:{bgcolor:'rgba(10,12,35,0.7)',bordercolor:'rgba(102,126,234,0.3)',borderwidth:1},
+                                       margin:{l:50,r:60,t:20,b:40}, barmode:'group' };
+                        Plotly.newPlot('summary_monthly_chart',[
+                            {name:'☀️ Avg Solar (kW/m²)', x:months, y:mSolar.map(v=>+v.toFixed(4)),
+                             type:'bar', marker:{color:'rgba(255,215,0,0.75)'}},
+                            {name:'📊 Avg Load (kW)', x:months, y:mLoad.map(v=>+v.toFixed(2)),
+                             type:'bar', marker:{color:'rgba(102,126,234,0.75)'}},
+                            {name:'🌬️ Avg Wind (m/s)', x:months, y:mWind.map(v=>+v.toFixed(2)),
+                             type:'scatter', mode:'lines+markers', yaxis:'y2',
+                             line:{color:'#00BFFF',width:2.5},
+                             marker:{color:'#00BFFF',size:6}},
+                        ], dark, {responsive:true});
+                    }
+                } catch(e){ console.warn('Monthly chart error:', e); }
+
+                // ── Show summary content, hide empty state ──
+                document.getElementById('summary_empty_state').style.display = 'none';
+                document.getElementById('summary_content').style.display = 'block';
+
+                // ── Show/init profile viewer cards ──
+                document.getElementById('solar_profile_card').style.display = 'block';
+                document.getElementById('wind_profile_card').style.display  = 'block';
+                updateSolarProfile();
+                updateWindProfile();
+
+                // ── Auto-switch to Summary tab ──
+                switchTab('initial_sizing');
+
+                document.getElementById('upload_status').innerHTML =
+                    '<p style="color:#38ef7d;">✅ <strong>' + filename + '</strong> loaded — ' + N + ' rows. See the <strong>Summary tab</strong> for full statistics.</p>';
+
+                hideLoading();
+
+            } catch(err) {
+                hideLoading();
+                alert('Error processing file: ' + err.message);
+                console.error(err);
+            }
+        }
+
+        function updateLoadParameters() {
+            const peak   = parseFloat(document.getElementById('peak_load_input')?.value) || 0;
+            const avg    = parseFloat(document.getElementById('avg_load_input')?.value)  || 0;
+            const annual = parseFloat(document.getElementById('annual_demand')?.value)   || 0;
+            console.log('Load params updated:', { peak, avg, annual });
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        //  PROFILE VIEWERS — Display uploaded data charts
+        // ══════════════════════════════════════════════════════════════════
+        function jumpToSolarDay(val) { if (val) { document.getElementById('solar_profile_day').value = val; updateSolarProfile(); } }
+        function jumpToWindDay(val)  { if (val) { document.getElementById('wind_profile_day').value  = val; updateWindProfile();  } }
+
+        function updateSolarProfile() {
+            if (!uploadedData.complete) return;
+            const day   = parseInt(document.getElementById('solar_profile_day')?.value) || 1;
+            const mode  = document.getElementById('solar_profile_mode')?.value || 'daily';
+            const res   = document.getElementById('solar_profile_resolution')?.value || 'hourly';
+            const solar = uploadedData.solar;
+            if (!solar) return;
+
+            let startH = (day - 1) * 24;
+            let endH   = startH + (mode === 'daily' ? 24 : mode === 'weekly' ? 168 : 720);
+            endH = Math.min(endH, solar.length);
+
+            let rawData = solar.slice(startH, endH);
+            let xLabels = Array.from({length: rawData.length}, (_, i) => 'H' + (startH + i + 1));
+
+            if (res === '6hourly') {
+                rawData = rawData.filter((_, i) => i % 6 === 0);
+                xLabels = xLabels.filter((_, i) => i % 6 === 0);
+            } else if (res === 'daily') {
+                const days = [];
+                for (let i = 0; i < rawData.length; i += 24) {
+                    const slice = rawData.slice(i, i + 24);
+                    days.push(slice.reduce((a,b)=>a+b,0) / slice.length);
+                }
+                rawData = days;
+                xLabels = Array.from({length: days.length}, (_, i) => 'Day ' + (Math.floor(startH/24) + i + 1));
+            }
+
+            const avgVal = rawData.reduce((a,b)=>a+b,0)/rawData.length;
+            const maxVal = Math.max(...rawData);
+            // Apply same unit conversion as processUploadedRows: if raw values > 10 → Wh/m² → /1000 for kW/m²
+            const profSolarIsWh = maxVal > 10;
+            const profDiv = profSolarIsWh ? 1000 : 1;
+            document.getElementById('solar_profile_stats').innerHTML =
+                '<strong>☀️ Solar Stats:</strong> Avg: ' + (avgVal/profDiv).toFixed(4) + ' kW/m² | Peak: ' + (maxVal/profDiv).toFixed(4) + ' kW/m² | Hours: ' + rawData.length;
+
+            Plotly.newPlot('solar_profile_chart', [{
+                x: xLabels, y: rawData.map(v => v/profDiv),
+                type: 'scatter', mode: 'lines',
+                fill: 'tozeroy', fillcolor: 'rgba(255,215,0,0.15)',
+                line: { color: '#FFD700', width: 2 }, name: 'GHI'
+            }], {
+                paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+                xaxis: { title: 'Hour', color: '#fff', gridcolor: 'rgba(255,255,255,0.1)' },
+                yaxis: { title: 'GHI (kW/m²)', color: '#fff', gridcolor: 'rgba(255,255,255,0.1)' },
+                font: { color: '#fff' }
+            }, { responsive: true, displayModeBar: false });
+        }
+
+        function updateWindProfile() {
+            if (!uploadedData.complete) return;
+            const day  = parseInt(document.getElementById('wind_profile_day')?.value) || 1;
+            const mode = document.getElementById('wind_profile_mode')?.value || 'daily';
+            const res  = document.getElementById('wind_profile_resolution')?.value || 'hourly';
+            const wind = uploadedData.wind;
+            if (!wind) return;
+
+            let startH = (day - 1) * 24;
+            let endH   = startH + (mode === 'daily' ? 24 : mode === 'weekly' ? 168 : 720);
+            endH = Math.min(endH, wind.length);
+
+            let rawData = wind.slice(startH, endH);
+            let xLabels = Array.from({length: rawData.length}, (_, i) => 'H' + (startH + i + 1));
+
+            if (res === '6hourly') {
+                rawData = rawData.filter((_, i) => i % 6 === 0);
+                xLabels = xLabels.filter((_, i) => i % 6 === 0);
+            } else if (res === 'daily') {
+                const days = [];
+                for (let i = 0; i < rawData.length; i += 24) {
+                    const slice = rawData.slice(i, i + 24);
+                    days.push(slice.reduce((a,b)=>a+b,0)/slice.length);
+                }
+                rawData = days;
+                xLabels = Array.from({length: days.length}, (_, i) => 'Day ' + (Math.floor(startH/24) + i + 1));
+            }
+
+            const avgVal = rawData.reduce((a,b)=>a+b,0)/rawData.length;
+            const maxVal = Math.max(...rawData);
+            document.getElementById('wind_profile_stats').innerHTML =
+                '<strong>🌬️ Wind Stats:</strong> Avg: ' + avgVal.toFixed(2) + ' m/s | Peak: ' + maxVal.toFixed(2) + ' m/s | Hours: ' + rawData.length;
+
+            Plotly.newPlot('wind_profile_chart', [{
+                x: xLabels, y: rawData,
+                type: 'scatter', mode: 'lines',
+                fill: 'tozeroy', fillcolor: 'rgba(0,191,255,0.15)',
+                line: { color: '#00BFFF', width: 2 }, name: 'Wind Speed'
+            }], {
+                paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+                xaxis: { title: 'Hour', color: '#fff', gridcolor: 'rgba(255,255,255,0.1)' },
+                yaxis: { title: 'Wind Speed (m/s)', color: '#fff', gridcolor: 'rgba(255,255,255,0.1)' },
+                font: { color: '#fff' }
+            }, { responsive: true, displayModeBar: false });
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        //  OPTIMIZATION TRIGGER — sends config to Python backend
+        // ══════════════════════════════════════════════════════════════════
+        function startOptimization() {
+            const algo = document.getElementById('algorithm_select')?.value || 'pso';
+            const algoName = algo === 'pso' ? 'PSO' : algo === 'nsga2' ? 'NSGA-II' : 'Both';
+
+            // Collect configuration from UI inputs
+            const config = {
+                // Variable bounds
+                pv_min:    parseFloat(document.getElementById('pv_min')?.value)    || 300,
+                pv_max:    parseFloat(document.getElementById('pv_max')?.value)    || 1200,
+                wind_min:  parseFloat(document.getElementById('wind_min')?.value)  || 0,
+                wind_max:  parseFloat(document.getElementById('wind_max')?.value)  || 500,
+                batt_min:  parseFloat(document.getElementById('batt_min')?.value)  || 10000,
+                batt_max:  parseFloat(document.getElementById('batt_max')?.value)  || 65000,
+                elec_min:  parseFloat(document.getElementById('elec_min')?.value)  || 50,
+                elec_max:  parseFloat(document.getElementById('elec_max')?.value)  || 500,
+                h2_min:    parseFloat(document.getElementById('h2_min')?.value)    || 10000,
+                h2_max:    parseFloat(document.getElementById('h2_max')?.value)    || 80000,
+                fc_min:    parseFloat(document.getElementById('fc_min')?.value)    || 100,
+                fc_max:    parseFloat(document.getElementById('fc_max')?.value)    || 600,
+                // MPBSI weights
+                w_tri:  parseFloat(document.getElementById('w_tri')?.value)  || 0.30,
+                w_ori:  parseFloat(document.getElementById('w_ori')?.value)  || 0.25,
+                w_lsi:  parseFloat(document.getElementById('w_lsi')?.value)  || 0.20,
+                w_esi:  parseFloat(document.getElementById('w_esi')?.value)  || 0.15,
+                w_ecsi: parseFloat(document.getElementById('w_ecsi')?.value) || 0.10,
+                // Costs
+                cost_pv:      parseFloat(document.getElementById('cost_pv')?.value)      || 83000,
+                cost_wind:    parseFloat(document.getElementById('cost_wind')?.value)    || 124500,
+                cost_battery: parseFloat(document.getElementById('cost_battery')?.value) || 41500,
+                cost_fc:      parseFloat(document.getElementById('cost_fc')?.value)      || 166000,
+                cost_elec:    parseFloat(document.getElementById('cost_elec')?.value)    || 124500,
+                cost_h2:      parseFloat(document.getElementById('cost_h2')?.value)      || 24900,
+                // Constraints
+                min_autonomy: parseInt(document.getElementById('min_autonomy')?.value) || 10,
+                // Location
+                location: currentLocation?.name || 'Leh-Ladakh',
+                altitude: parseInt(document.getElementById('altitude_input')?.value) || 3500,
+                // Algorithm
+                algorithm: algoName
+            };
+
+            showLoading('Sending to Python backend...');
+
+            // ── Send to Python backend via MPBSI_API bridge ──
+            if (window.MPBSI_API && typeof window.MPBSI_API.runOptimization === 'function') {
+                window.MPBSI_API.runOptimization(algoName, config)
+                    .then(results => {
+                        hideLoading();
+                        displayResults(results);
+                    })
+                    .catch(err => {
+                        hideLoading();
+                        showError('Backend error: ' + err.message);
+                    });
+            } else {
+                // ── Streamlit bridge mode: post message and show waiting state ──
+                hideLoading();
+                showWaitingForBackend(algoName, config);
+            }
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        //  WAITING STATE — shown while Python backend processes
+        // ══════════════════════════════════════════════════════════════════
+        function showWaitingForBackend(algo, config) {
+            startRunningTab(algo);
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        //  RESULTS DISPLAY — renders results from Python backend payload
+        // ══════════════════════════════════════════════════════════════════
+        function displayResults(results) {
+            if (!results) return;
+
+            const opt = results.optimization || results;
+            const algo = (opt.algorithm || 'PSO').toUpperCase();
+            const pillars = opt.best_pillars || opt.pillars || {};
+            const bestX   = opt.best_x || opt.config || [];
+            const mpbsi   = opt.best_mpbsi ?? opt.mpbsi ?? 0;
+            const rel     = opt.reliability_metrics || opt.metrics || {};
+            const conv    = opt.convergence || [];
+            const isFeasible = opt.feasible !== false;
+            const MIN_AUTO   = parseInt(document.getElementById('min_autonomy')?.value) || 10;
+
+            // ── Steps summary ──
+            const steps = results.steps || {};
+            const step5 = steps.step5_battery_dispatch || {};
+            const step7 = steps.step7_h2_dispatch || {};
+            const step8 = steps.step8_deficit_window || {};
+            const step9 = steps.step9_survivability_sizing || {};
+
+            // ── Autonomy Days Calculation ──
+            // Autonomy = total storage (Battery + H₂) / critical daily energy demand
+            // Critical fraction = 60% of total load (matching MATLAB Step 9)
+            const CRITICAL_FRAC = 0.60;
+            const battKWh = Array.isArray(bestX) ? (parseFloat(bestX[2]) || 0) : 0;
+            const h2KWh   = Array.isArray(bestX) ? (parseFloat(bestX[4]) || 0) : 0;
+            const totalStorageKWh = battKWh + h2KWh;
+            // Use critical_daily_energy_kWh from step9 if available, else estimate from annual load
+            let criticalDailyKWh = step9.critical_daily_energy_kWh || 0;
+            if (!criticalDailyKWh && rel.annual_load_MWh) {
+                criticalDailyKWh = (rel.annual_load_MWh * 1000 / 365) * CRITICAL_FRAC;
+            }
+            const autonomyDays = criticalDailyKWh > 0 ? (totalStorageKWh / criticalDailyKWh) : 0;
+            const autoBadgeColor = autonomyDays >= MIN_AUTO ? '#38ef7d' : autonomyDays >= MIN_AUTO * 0.7 ? '#FFD700' : '#ff6b6b';
+
+            optimizationResults = results;
+
+            // ── Build results HTML ──
+            const pillarNames = { ESI:'ESI', EcSI:'EcSI', TRI:'TRI', ORI:'ORI', LSI:'LSI' };
+            const pillarColors = {
+                ESI:'#38ef7d', EcSI:'#FFD700', TRI:'#667eea', ORI:'#00BFFF', LSI:'#ff9f43'
+            };
+
+            const pillarHtml = Object.entries(pillars).map(([k, v]) => {
+                const score = typeof v === 'number' ? v : 0;
+                const color = score >= 0.8 ? '#38ef7d' : score >= 0.6 ? '#FFD700' : '#ff6b6b';
+                return `<div class="metric-card">
+                    <div class="label">${k} (${getWeight(k)}%)</div>
+                    <div class="value" style="color:${color};">${(score*100).toFixed(1)}%</div>
+                </div>`;
+            }).join('');
+
+            const varNames = ['PV (kWp)', 'Wind (kW)', 'Battery (kWh)', 'Electrolyzer (kW)', 'H₂ Storage (kWh)', 'Fuel Cell (kW)'];
+            const configHtml = Array.isArray(bestX) ? bestX.map((v, i) =>
+                `<tr><td>${varNames[i] || 'Var ' + i}</td><td><strong>${parseFloat(v).toFixed(1)}</strong></td></tr>`
+            ).join('') : Object.entries(bestX).map(([k, v]) =>
+                `<tr><td>${k}</td><td><strong>${parseFloat(v).toFixed(1)}</strong></td></tr>`
+            ).join('');
+
+            const html = `
+                <div class="card full-width">
+                    <h2>🏆 ${algo} Optimization Results</h2>
+                    <div class="${isFeasible ? 'status-badge status-feasible' : 'status-badge status-infeasible'}">
+                        ${isFeasible ? '✓ FEASIBLE SOLUTION FOUND' : '✗ NO FEASIBLE SOLUTION IN SEARCH SPACE'}
+                    </div>
+                </div>
+
+                <div class="card full-width">
+                    <h2>📊 Performance Summary</h2>
+                    <div class="results-grid">
+                        <div class="metric-card">
+                            <div class="label">MPBSI Score</div>
+                            <div class="value" id="mpbsi-score" style="font-size:2.5em; color:${mpbsi>=0.8?'#38ef7d':mpbsi>=0.6?'#FFD700':'#ff6b6b'};">${mpbsi.toFixed(4)}</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="label">Critical LPSP</div>
+                            <div class="value" style="color:${(rel.lpsp_critical||0)<0.001?'#38ef7d':'#ff6b6b'};">${((rel.lpsp_critical||0)*100).toFixed(4)}%</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="label">RES Generation</div>
+                            <div class="value" style="color:#00BFFF;">${(rel.total_renewable_MWh||0).toFixed(0)}</div>
+                            <div class="label">MWh/year</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="label">Annual Demand</div>
+                            <div class="value">${(rel.annual_load_MWh||0).toFixed(0)}</div>
+                            <div class="label">MWh/year</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="label">Curtailed (Semi)</div>
+                            <div class="value">${(rel.curtailed_semi_MWh||0).toFixed(1)}</div>
+                            <div class="label">MWh</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="label">Runtime</div>
+                            <div class="value" style="font-size:1.6em;">${(opt.runtime_seconds||0).toFixed(1)}s</div>
+                        </div>
+                        <div class="metric-card" style="border: 2px solid ${autoBadgeColor}; background: rgba(0,0,0,0.2);">
+                            <div class="label">⏳ Autonomy Days</div>
+                            <div class="value" style="font-size:2.2em; color:${autoBadgeColor}; font-weight:bold;">${autonomyDays.toFixed(1)}</div>
+                            <div class="label" style="color:${autoBadgeColor};">days (min: ${MIN_AUTO}d)</div>
+                            <div style="margin-top:8px; font-size:0.8em; color:#a0a8d4;">
+                                🔋 Battery: ${battKWh.toFixed(0)} kWh<br>
+                                🔵 H₂ Store: ${h2KWh.toFixed(0)} kWh<br>
+                                ⚡ Critical Load: ${criticalDailyKWh.toFixed(0)} kWh/day
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card full-width">
+                    <h2>⏳ Autonomy Analysis</h2>
+                    <div class="info-box" style="background: rgba(${autonomyDays >= MIN_AUTO ? '56,239,125' : autonomyDays >= MIN_AUTO*0.7 ? '255,215,0' : '255,107,107'},0.1); border-left: 4px solid ${autoBadgeColor};">
+                        <p style="font-size:1.05em;">
+                            <strong style="color:${autoBadgeColor};">
+                                ${autonomyDays >= MIN_AUTO ? '✅ Autonomy Requirement MET' : '⚠️ Autonomy Requirement NOT MET'}
+                            </strong>
+                        </p>
+                        <p style="margin-top:10px;">The system can operate autonomously (on stored energy alone) for <strong style="color:${autoBadgeColor}; font-size:1.2em;">${autonomyDays.toFixed(2)} days</strong> without any renewable generation.</p>
+                        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:15px; margin-top:15px;">
+                            <div style="text-align:center; padding:12px; background:rgba(102,126,234,0.15); border-radius:10px;">
+                                <div style="color:#8b9dc3; font-size:0.85em;">🔋 Battery Storage</div>
+                                <div style="color:#667eea; font-size:1.5em; font-weight:bold;">${battKWh.toFixed(0)} kWh</div>
+                                <div style="color:#8b9dc3; font-size:0.8em;">${criticalDailyKWh > 0 ? (battKWh/criticalDailyKWh).toFixed(1) : '—'} days alone</div>
+                            </div>
+                            <div style="text-align:center; padding:12px; background:rgba(56,239,125,0.1); border-radius:10px;">
+                                <div style="color:#8b9dc3; font-size:0.85em;">🔵 H₂ Storage</div>
+                                <div style="color:#38ef7d; font-size:1.5em; font-weight:bold;">${h2KWh.toFixed(0)} kWh</div>
+                                <div style="color:#8b9dc3; font-size:0.8em;">${criticalDailyKWh > 0 ? (h2KWh/criticalDailyKWh).toFixed(1) : '—'} days alone</div>
+                            </div>
+                            <div style="text-align:center; padding:12px; background:rgba(255,215,0,0.1); border-radius:10px;">
+                                <div style="color:#8b9dc3; font-size:0.85em;">⚡ Critical Daily Load</div>
+                                <div style="color:#FFD700; font-size:1.5em; font-weight:bold;">${criticalDailyKWh.toFixed(0)} kWh</div>
+                                <div style="color:#8b9dc3; font-size:0.8em;">60% of avg daily demand</div>
+                            </div>
+                            <div style="text-align:center; padding:12px; background:rgba(${autonomyDays >= MIN_AUTO ? '56,239,125' : '255,107,107'},0.1); border-radius:10px;">
+                                <div style="color:#8b9dc3; font-size:0.85em;">🎯 Total Autonomy</div>
+                                <div style="color:${autoBadgeColor}; font-size:1.5em; font-weight:bold;">${autonomyDays.toFixed(1)} days</div>
+                                <div style="color:#8b9dc3; font-size:0.8em;">Minimum required: ${MIN_AUTO} days</div>
+                            </div>
+                        </div>
+                        <p style="margin-top:12px; font-size:0.9em; color:#a0a8d4;">
+                            <em>Formula: Autonomy = (Battery kWh + H₂ Storage kWh) ÷ Critical Daily Load kWh | Critical Load = 60% of average daily demand</em>
+                        </p>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>🏛️ Sustainability Pillars</h2>
+                    <div class="results-grid">${pillarHtml}</div>
+                </div>
+
+                <div class="card">
+                    <h2>⚙️ Optimal Configuration</h2>
+                    <table>
+                        <tr><th>Component</th><th>Optimal Value</th></tr>
+                        ${configHtml}
+                    </table>
+                </div>
+
+                ${Object.keys(steps).length > 0 ? `
+                <div class="card full-width">
+                    <h2>🔬 Step-by-Step Analysis (from Python backend)</h2>
+                    <div class="results-grid">
+                        ${step5.lpsp_critical !== undefined ? `
+                        <div class="metric-card">
+                            <div class="label">Step 5: Battery LPSP</div>
+                            <div class="value" style="font-size:1.5em;">${(step5.lpsp_critical*100).toFixed(3)}%</div>
+                        </div>` : ''}
+                        ${step7.raw_critical_deficit_MWh !== undefined ? `
+                        <div class="metric-card">
+                            <div class="label">Step 7: Raw Deficit</div>
+                            <div class="value" style="font-size:1.5em;">${step7.raw_critical_deficit_MWh.toFixed(1)}</div>
+                            <div class="label">MWh</div>
+                        </div>` : ''}
+                        ${step8.max_days !== undefined ? `
+                        <div class="metric-card">
+                            <div class="label">Step 8: Max Deficit Window</div>
+                            <div class="value" style="font-size:1.5em;">${step8.max_days.toFixed(1)}</div>
+                            <div class="label">days</div>
+                        </div>` : ''}
+                        ${step9.h2_baseline_15d_kWh !== undefined ? `
+                        <div class="metric-card">
+                            <div class="label">Step 9: H₂ Baseline (15d)</div>
+                            <div class="value" style="font-size:1.5em;">${(step9.h2_baseline_15d_kWh/1000).toFixed(1)}</div>
+                            <div class="label">MWh</div>
+                        </div>` : ''}
+                    </div>
+                </div>` : ''}
+
+                ${renderCapexSection(bestX, rel)}
+            `;
+
+            document.getElementById('results_container').innerHTML = html;
+
+
+
+            // ── Render CAPEX charts ──
+            setTimeout(() => renderCapexCharts(bestX, rel), 80);
+
+            // ── Switch to results tab ──
+            switchTab('results');
+            generateGraphs(results);
+        }
+
+        function getWeight(pillar) {
+            const map = { TRI:'w_tri', ORI:'w_ori', LSI:'w_lsi', ESI:'w_esi', EcSI:'w_ecsi' };
+            const id = map[pillar];
+            const val = parseFloat(document.getElementById(id)?.value) || 0;
+            return (val * 100).toFixed(0);
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        //  GRAPHS — Generated from backend results data
+        // ══════════════════════════════════════════════════════════════════
+        function generateGraphs(results) {
+            if (!results) return;
+            const opt     = results.optimization || results;
+            const pillars = opt.best_pillars || opt.pillars || {};
+            const bestX   = opt.best_x || [];
+            const rel     = opt.reliability_metrics || {};
+            const conv    = opt.convergence || [];
+
+            const varNames = ['PV', 'Wind', 'Battery', 'Electrolyzer', 'H₂', 'Fuel Cell'];
+            const colors   = ['#FFD700','#00BFFF','#667eea','#38ef7d','#ff9f43','#ff6b6b'];
+
+            document.getElementById('graphs_container').innerHTML = `
+                <div class="card full-width">
+                    <h2>📊 Complete Visualization Dashboard</h2>
+                </div>
+                <div class="card"><h2>1. MPBSI Pillars Radar</h2><div id="g_radar" class="chart-container"></div></div>
+                <div class="card"><h2>2. Pillar Bar Chart</h2><div id="g_bars" class="chart-container"></div></div>
+                <div class="card"><h2>3. Optimal System Sizing</h2><div id="g_config" class="chart-container"></div></div>
+                ${conv.length > 0 ? '<div class="card"><h2>4. Convergence Curve</h2><div id="g_conv" class="chart-container"></div></div>' : ''}
+                <div class="card"><h2>5. Energy Balance Overview</h2><div id="g_energy" class="chart-container"></div></div>
+                <div class="card"><h2>6. Pillar Contribution to MPBSI</h2><div id="g_pie" class="chart-container"></div></div>`;
+
+            const dark = { paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)', font:{color:'#fff'} };
+            const axis = { color:'#fff', gridcolor:'rgba(255,255,255,0.1)' };
+
+            // 1. Radar
+            const pKeys = Object.keys(pillars), pVals = pKeys.map(k => pillars[k]||0);
+            Plotly.newPlot('g_radar', [{
+                type:'scatterpolar', r:[...pVals,pVals[0]], theta:[...pKeys,pKeys[0]],
+                fill:'toself', fillcolor:'rgba(102,126,234,0.3)',
+                line:{color:'#667eea',width:3}, name:'MPBSI Pillars'
+            }], { ...dark, polar:{radialaxis:{visible:true,range:[0,1],color:'#fff',gridcolor:'rgba(255,255,255,0.2)'},angularaxis:{color:'#fff'}} },
+            {responsive:true,displayModeBar:false});
+
+            // 2. Bar chart of pillars
+            Plotly.newPlot('g_bars', [{
+                x: pKeys, y: pVals.map(v => v*100),
+                type:'bar', marker:{color:colors.slice(0, pKeys.length)}, name:'Score (%)'
+            }], { ...dark, xaxis:{...axis,title:'Pillar'}, yaxis:{...axis,title:'Score (%)',range:[0,100]} },
+            {responsive:true,displayModeBar:false});
+
+            // 3. System sizing
+            if (Array.isArray(bestX) && bestX.length > 0) {
+                Plotly.newPlot('g_config', [{
+                    x: varNames.slice(0, bestX.length), y: bestX.map(v => parseFloat(v)||0),
+                    type:'bar', marker:{color:colors}, name:'Optimal Sizing'
+                }], { ...dark, xaxis:{...axis,title:'Component'}, yaxis:{...axis,title:'Value (kW/kWh)'} },
+                {responsive:true,displayModeBar:false});
+            }
+
+            // 4. Convergence
+            if (conv.length > 0 && document.getElementById('g_conv')) {
+                Plotly.newPlot('g_conv', [{
+                    x: Array.from({length:conv.length},(_,i)=>i), y: conv,
+                    type:'scatter', mode:'lines', line:{color:'#38ef7d',width:3}, name:'Best MPBSI'
+                }], { ...dark, xaxis:{...axis,title:'Iteration'}, yaxis:{...axis,title:'MPBSI',range:[0,1]} },
+                {responsive:true,displayModeBar:false});
+            }
+
+            // 5. Energy balance bar
+            const resMWh  = rel.total_renewable_MWh || 0;
+            const loadMWh = rel.annual_load_MWh || 0;
+            const curtSemi= rel.curtailed_semi_MWh || 0;
+            const curtNon = rel.curtailed_non_MWh  || 0;
+            Plotly.newPlot('g_energy', [
+                {x:['RES Generation','Load Demand','Curtailed Semi','Curtailed Non'],
+                 y:[resMWh, loadMWh, curtSemi, curtNon],
+                 type:'bar', marker:{color:['#38ef7d','#667eea','#FFD700','#ff6b6b']}, name:'MWh'}
+            ], { ...dark, xaxis:{...axis,title:'Category'}, yaxis:{...axis,title:'MWh/year'} },
+            {responsive:true,displayModeBar:false});
+
+            // 6. Pillar contribution pie
+            const w = { TRI:0.30, ORI:0.25, LSI:0.20, ESI:0.15, EcSI:0.10 };
+            Plotly.newPlot('g_pie', [{
+                labels: pKeys,
+                values: pKeys.map(k => ((pillars[k]||0) * (w[k]||0.1) * 100)),
+                type: 'pie',
+                marker: { colors: colors },
+                textinfo: 'label+percent',
+                hole: 0.4
+            }], { ...dark, title:{text:'Weighted Pillar Contribution',font:{color:'#fff'}} },
+            {responsive:true,displayModeBar:false});
+        }
+
+        function displayGenerationMetrics(solarData, windData, loadData) {
+            // Called after upload to update UI stats — no computation
+            console.log('Generation metrics displayed from upload stats.');
+        }
+            
+        function calculateAndDisplay(solarData, windData, loadData) {
+            // Called after upload — show preliminary pillar card (pre-optimization estimate)
+            document.getElementById('pillar_scores_card').style.display = 'block';
+            const html = `
+                <div class="metric-card" style="grid-column:span 6;">
+                    <div class="label">⏳ Awaiting Python Backend</div>
+                    <div class="value" style="font-size:1.2em; color:#FFD700;">
+                        Upload complete — click "Start Optimization" to compute pillar scores via Python backend
+                    </div>
+                </div>`;
+            document.getElementById('pillar_scores_display').innerHTML = html;
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        //  LOADING OVERLAY
+        // ══════════════════════════════════════════════════════════════════
+        function showLoading(text) {
+            const el = document.getElementById('loading');
+            const txt = document.getElementById('loading_text');
+            if (el)  el.style.display = 'flex';
+            if (txt) txt.textContent = text || 'Processing...';
+        }
+        function hideLoading() {
+            const el = document.getElementById('loading');
+            if (el) el.style.display = 'none';
+        }
+        function showError(msg) {
+            document.getElementById('results_container').innerHTML = `
+                <div class="card full-width">
+                    <h2>❌ Error</h2>
+                    <div class="info-box" style="border-color:#ff6b6b; background:rgba(255,107,107,0.1);">
+                        <p style="color:#ff6b6b;">${msg}</p>
+                    </div>
+                </div>`;
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        //  PYTHON BACKEND BRIDGE — called by Streamlit injected script
+        //  Results arrive as JSON from mpbsi_backend.py via run_pipeline()
+        // ══════════════════════════════════════════════════════════════════
+
+        // ══════════════════════════════════════════════════════════════════
+        //  RUNNING TAB — animated optimization progress display
+        // ══════════════════════════════════════════════════════════════════
+        const PIPELINE_STEPS = [
+            { id:'s1',  label:'Load Data',       icon:'📂' },
+            { id:'s2',  label:'Solar Gen',        icon:'☀️' },
+            { id:'s3',  label:'Wind Gen',         icon:'🌬️' },
+            { id:'s4',  label:'Hybrid Total',     icon:'⚡' },
+            { id:'s5',  label:'Battery LPSP',     icon:'🔋' },
+            { id:'s6',  label:'Seasonal Storage', icon:'📦' },
+            { id:'s7',  label:'H₂ Dispatch',      icon:'🔵' },
+            { id:'s8',  label:'Deficit Window',   icon:'📉' },
+            { id:'s9',  label:'Survivability',    icon:'🛡️' },
+            { id:'s10', label:'MPBSI Score',      icon:'🏛️' },
+            { id:'sopt',label:'Optimization',     icon:'🚀' },
+        ];
+
+        let _runInterval = null;
+        let _runStepIdx  = 0;
+        let _runLogLines = [];
+        let _runStartTime = null;
+
+        function runningTabLog(msg, color='#8b9dc3') {
+            const log = document.getElementById('running_log');
+            if (!log) return;
+            const now = new Date();
+            const ts  = now.toTimeString().slice(0,8);
+            _runLogLines.push(`<div style="color:${color};"><span style="color:rgba(102,126,234,0.5);">[${ts}]</span> ${msg}</div>`);
+            if (_runLogLines.length > 60) _runLogLines.shift();
+            log.innerHTML = _runLogLines.join('');
+            log.scrollTop = log.scrollHeight;
+        }
+
+        function buildStepGrid() {
+            const grid = document.getElementById('running_step_grid');
+            if (!grid) return;
+            grid.innerHTML = PIPELINE_STEPS.map(s => `
+                <div id="stepbox_${s.id}" style="
+                    padding:10px 8px; border-radius:10px; text-align:center;
+                    border:1px solid rgba(102,126,234,0.15);
+                    background:rgba(10,12,30,0.5); transition:all 0.4s;">
+                    <div style="font-size:1.3em;">${s.icon}</div>
+                    <div style="font-size:0.72em; color:#606080; font-weight:600;
+                                letter-spacing:0.5px; margin-top:4px;">${s.label}</div>
+                    <div id="stepstatus_${s.id}" style="font-size:0.7em; color:#404060; margin-top:3px;">waiting</div>
+                </div>`).join('');
+        }
+
+        function markStep(id, state) {
+            // state: 'active' | 'done' | 'waiting'
+            const box    = document.getElementById('stepbox_'    + id);
+            const status = document.getElementById('stepstatus_' + id);
+            if (!box || !status) return;
+            if (state === 'done') {
+                box.style.background    = 'rgba(56,239,125,0.1)';
+                box.style.borderColor   = 'rgba(56,239,125,0.4)';
+                status.style.color      = '#38ef7d';
+                status.textContent      = '✓ done';
+            } else if (state === 'active') {
+                box.style.background    = 'rgba(102,126,234,0.2)';
+                box.style.borderColor   = 'rgba(102,126,234,0.6)';
+                status.style.color      = '#a78bfa';
+                status.textContent      = '⚙ running';
+                box.style.boxShadow     = '0 0 12px rgba(102,126,234,0.35)';
+            } else {
+                box.style.background    = 'rgba(10,12,30,0.5)';
+                box.style.borderColor   = 'rgba(102,126,234,0.15)';
+                status.style.color      = '#404060';
+                status.textContent      = 'waiting';
+                box.style.boxShadow     = 'none';
+            }
+        }
+
+        function setProgress(pct) {
+            const bar = document.getElementById('running_bar');
+            const lbl = document.getElementById('running_pct');
+            if (bar) bar.style.width = Math.min(pct, 100) + '%';
+            if (lbl) lbl.textContent  = Math.round(pct) + '%';
+        }
+
+        function startRunningTab(algo) {
+            // Show and switch to running tab
+            const btn = document.getElementById('tab_btn_running');
+            if (btn) {
+                btn.style.display = 'block';
+                btn.textContent   = '⚡ Running...';
+                btn.style.background = 'linear-gradient(135deg,rgba(102,126,234,0.4),rgba(118,75,162,0.4))';
+                btn.style.borderColor = 'rgba(102,126,234,0.7)';
+                btn.style.animation   = 'pulse 1.5s ease-in-out infinite';
+            }
+            switchTab('running');
+
+            // Reset state
+            _runStepIdx  = 0;
+            _runLogLines = [];
+            _runStartTime = Date.now();
+
+            // Set algo badge
+            const badge = document.getElementById('running_algo_badge');
+            if (badge) badge.textContent = (algo || 'PSO') + ' Optimization';
+
+            const title = document.getElementById('running_title');
+            if (title) title.textContent = 'Optimizing...';
+
+            const sub = document.getElementById('running_subtitle');
+            if (sub) sub.textContent = 'Python backend is running the MPBSI pipeline';
+
+            const spinner = document.getElementById('running_spinner');
+            if (spinner) { spinner.style.display = 'block'; }
+
+            const done = document.getElementById('running_done');
+            if (done) done.style.display = 'none';
+
+            setProgress(0);
+            buildStepGrid();
+            runningTabLog('▶ ' + (algo||'PSO') + ' pipeline started', '#667eea');
+            runningTabLog('Loading dataset and computing parameters...', '#a0a8d4');
+
+            // Animate steps progressively (simulated — real steps tracked via log messages)
+            const stepDurations = [1200, 800, 800, 600, 1500, 1200, 2000, 800, 600, 800, 0];
+            let elapsed = 0;
+            PIPELINE_STEPS.forEach((step, i) => {
+                const delay = elapsed;
+                const dur   = stepDurations[i] || 1000;
+                setTimeout(() => {
+                    if (i > 0) markStep(PIPELINE_STEPS[i-1].id, 'done');
+                    markStep(step.id, 'active');
+                    const pct = Math.round((i / PIPELINE_STEPS.length) * 85);
+                    setProgress(pct);
+                    const msgs = [
+                        'Loading hourly dataset (8760 rows)...',
+                        'Computing solar PV generation (Step 2)...',
+                        'Computing wind turbine generation (Step 3)...',
+                        'Calculating hybrid RES total (Step 4)...',
+                        'Running battery dispatch + LPSP (Step 5)...',
+                        'Evaluating seasonal storage requirements (Step 6)...',
+                        'H₂ dispatch simulation (Step 7)...',
+                        'Identifying max deficit windows (Step 8)...',
+                        'Survivability sizing check (Step 9)...',
+                        'Computing MPBSI pillar scores (Step 10)...',
+                        'Running ' + (algo||'PSO') + ' optimization loop...',
+                    ];
+                    runningTabLog(msgs[i] || step.label + '...', '#c8d0e8');
+                }, delay);
+                elapsed += dur;
+            });
+
+            // After all simulated steps, show "waiting for result" pulsing
+            setTimeout(() => {
+                setProgress(90);
+                const t = document.getElementById('running_title');
+                if (t) t.textContent = 'Almost done...';
+                runningTabLog('Evaluating final MPBSI score...', '#a78bfa');
+                _runInterval = setInterval(() => {
+                    const elapsed_s = ((Date.now() - _runStartTime)/1000).toFixed(0);
+                    const sub2 = document.getElementById('running_subtitle');
+                    if (sub2) sub2.textContent = `Running for ${elapsed_s}s — waiting for backend result`;
+                }, 1000);
+            }, elapsed);
+        }
+
+        function finishRunningTab() {
+            // Stop timer
+            if (_runInterval) { clearInterval(_runInterval); _runInterval = null; }
+
+            // Mark all steps done
+            PIPELINE_STEPS.forEach(s => markStep(s.id, 'done'));
+            setProgress(100);
+
+            const elapsed_s = ((Date.now() - (_runStartTime||Date.now()))/1000).toFixed(1);
+
+            const title = document.getElementById('running_title');
+            if (title) title.textContent = 'Complete!';
+
+            const sub = document.getElementById('running_subtitle');
+            if (sub) sub.textContent = `Finished in ${elapsed_s}s`;
+
+            const spinner = document.getElementById('running_spinner');
+            if (spinner) spinner.style.display = 'none';
+
+            const done = document.getElementById('running_done');
+            if (done) done.style.display = 'block';
+
+            const btn = document.getElementById('tab_btn_running');
+            if (btn) {
+                btn.textContent          = '✅ Done';
+                btn.style.background     = 'linear-gradient(135deg,rgba(56,239,125,0.3),rgba(17,153,142,0.3))';
+                btn.style.borderColor    = 'rgba(56,239,125,0.6)';
+                btn.style.animation      = 'none';
+                btn.style.color          = '#38ef7d';
+            }
+
+            runningTabLog(`✅ Optimization complete in ${elapsed_s}s`, '#38ef7d');
+            runningTabLog('Switching to Results tab...', '#667eea');
+
+            // Auto-switch to results after short delay
+            setTimeout(() => switchTab('results'), 1400);
+        }
+
+        window.receiveBackendResults = function(jsonResults) {
+            try {
+                const results = typeof jsonResults === 'string' ? JSON.parse(jsonResults) : jsonResults;
+                // If running tab wasn't already active (e.g., direct Streamlit injection),
+                // briefly show it completing before switching to results
+                const wasRunning = document.getElementById('running')?.classList.contains('active');
+                if (!wasRunning) {
+                    const algo = (results.optimization || results).algorithm || 'PSO';
+                    startRunningTab(algo);
+                }
+                setTimeout(() => {
+                    finishRunningTab();
+                    setTimeout(() => {
+                        displayResults(results);
+                        console.log('✅ Backend results received and displayed.');
+                    }, 1400);
+                }, wasRunning ? 0 : 600);
+            } catch(e) {
+                showError('Failed to parse backend results: ' + e.message);
+            }
+        };
+
+        // Expose MPBSI_API for direct programmatic use
+        window.MPBSI_UI = {
+            displayResults,
+            generateGraphs,
+            switchTab,
+            showLoading,
+            hideLoading,
+            uploadedData: () => uploadedData,
+            currentLocation: () => currentLocation
+        };
+
+        // ══════════════════════════════════════════════════════════════════
+        //  SIDEBAR FILE INJECTION — called by Streamlit when file uploaded
+        //  base64Data: base64-encoded file bytes; filename: original name
+        // ══════════════════════════════════════════════════════════════════
+        window.receiveFileFromSidebar = function(base64Data, filename) {
+            try {
+                const ext = filename.split('.').pop().toLowerCase();
+                const byteStr = atob(base64Data);
+                const arr = new Uint8Array(byteStr.length);
+                for(let i=0;i<byteStr.length;i++) arr[i] = byteStr.charCodeAt(i);
+                const blob = new Blob([arr], {
+                    type: ext === 'csv'
+                        ? 'text/csv'
+                        : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                });
+                const file = new File([blob], filename, {type: blob.type});
+
+                // ── Inject into file input so the native uploader also shows the file ──
+                const dt = new DataTransfer();
+                dt.items.add(file);
+                const fileInput = document.getElementById('file_input');
+                if(fileInput) {
+                    fileInput.files = dt.files;
+                    onFileSelected(fileInput);
+                }
+
+                // ── Parse and process directly ──
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        let rows;
+                        if(ext === 'csv'){
+                            const parsed = Papa.parse(e.target.result, {header:true, dynamicTyping:true, skipEmptyLines:true});
+                            rows = parsed.data;
+                        } else {
+                            const wb = XLSX.read(e.target.result, {type:'array'});
+                            rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+                        }
+                        processUploadedRows(rows, filename);
+                    } catch(err) {
+                        console.error('Sidebar file parse error:', err);
+                    }
+                };
+                if(ext === 'csv') reader.readAsText(file);
+                else reader.readAsArrayBuffer(file);
+
+                console.log('✅ Sidebar file injected:', filename);
+            } catch(e) {
+                console.error('receiveFileFromSidebar error:', e);
+            }
+        };
+
+
+        // ══════════════════════════════════════════════════════════════════
+        //  CAPEX / NPC  HELPERS
+        // ══════════════════════════════════════════════════════════════════
+        function getFinancialParams() {
+            return {
+                cost_pv:      parseFloat(document.getElementById('cost_pv')?.value)       || 55000,
+                cost_wind:    parseFloat(document.getElementById('cost_wind')?.value)      || 120000,
+                cost_battery: parseFloat(document.getElementById('cost_battery')?.value)   || 22000,
+                cost_fc:      parseFloat(document.getElementById('cost_fc')?.value)        || 110000,
+                cost_elec:    parseFloat(document.getElementById('cost_elec')?.value)      || 70000,
+                cost_h2:      parseFloat(document.getElementById('cost_h2')?.value)        || 80000,
+                discount_rate: parseFloat(document.getElementById('fp_discount')?.value)   || 8,
+                lifetime:      parseInt(document.getElementById('fp_lifetime')?.value)      || 20,
+                om_rate:       parseFloat(document.getElementById('fp_om_rate')?.value)    || 2,
+                bat_replace_yr: parseInt(document.getElementById('fp_bat_replace')?.value) || 10,
+            };
+        }
+
+        function computeCapexNpc(bestX, rel) {
+            if (!Array.isArray(bestX) || bestX.length < 6) return null;
+            const fp = getFinancialParams();
+            const [pv_kw, wt_kw, bat_kwh, el_kw, h2_kwh, fc_kw] = bestX.map(v => parseFloat(v) || 0);
+            const r = fp.discount_rate / 100;
+            const n = fp.lifetime;
+            const om_rate = fp.om_rate / 100;
+
+            const Cost_PV  = fp.cost_pv      * pv_kw;
+            const Cost_WT  = fp.cost_wind     * wt_kw;
+            const Cost_Bat = fp.cost_battery  * bat_kwh;
+            const Cost_EL  = fp.cost_elec     * el_kw;
+            const Cost_H2  = fp.cost_h2       * h2_kwh;
+            const Cost_FC  = fp.cost_fc       * fc_kw;
+            const CAPEX    = Cost_PV + Cost_WT + Cost_Bat + Cost_EL + Cost_H2 + Cost_FC;
+
+            const fc_yr    = 10, el_yr = 15;
+            const Bat_repl = Cost_Bat / Math.pow(1 + r, fp.bat_replace_yr);
+            const FC_repl  = Cost_FC  / Math.pow(1 + r, fc_yr);
+            const EL_repl  = Cost_EL  / Math.pow(1 + r, el_yr);
+            const OM_ann   = om_rate * CAPEX;
+            const annuity  = (1 - Math.pow(1 + r, -n)) / r;
+            const OM_PV    = OM_ann * annuity;
+            const NPC      = CAPEX + Bat_repl + FC_repl + EL_repl + OM_PV;
+
+            const ann_load_kwh = (rel && rel.annual_load_MWh ? rel.annual_load_MWh * 1000 : 0);
+            const LCOE = (ann_load_kwh > 0 && n > 0) ? NPC / (ann_load_kwh * n) : 0;
+
+            return { CAPEX, NPC, LCOE, OM_ann, OM_PV,
+                     Cost_PV, Cost_WT, Cost_Bat, Cost_EL, Cost_H2, Cost_FC,
+                     Bat_repl, FC_repl, EL_repl, fp, r, n };
+        }
+
+        function crFmt(v) {
+            return '₹' + (v / 1e7).toFixed(3) + ' Cr';
+        }
+        function pctFmt(v, total) {
+            return total > 0 ? (v / total * 100).toFixed(1) + '%' : '—';
+        }
+
+        function renderCapexSection(bestX, rel) {
+            const c = computeCapexNpc(bestX, rel);
+            if (!c) return '';
+            const { CAPEX, NPC, LCOE, OM_ann, Cost_PV, Cost_WT, Cost_Bat,
+                    Cost_EL, Cost_H2, Cost_FC, Bat_repl, FC_repl, EL_repl, OM_PV, fp } = c;
+
+            const kpiStyle = 'text-align:center;padding:16px 12px;background:rgba(10,12,35,0.6);border-radius:12px;border:1px solid rgba(102,126,234,0.2);';
+            const kpiLabel = 'font-size:0.72em;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#a0a8d4;margin-bottom:6px;';
+            const kpiVal   = 'font-size:1.6em;font-weight:700;font-family:JetBrains Mono,monospace;';
+
+            const rows = [
+                ['PV Array',      Cost_PV,  '☀️'],
+                ['Wind Turbines', Cost_WT,  '🌬️'],
+                ['Battery Bank',  Cost_Bat, '🔋'],
+                ['Electrolyzer',  Cost_EL,  '🔌'],
+                ['H2 Storage',    Cost_H2,  '🔵'],
+                ['Fuel Cell',     Cost_FC,  '⚡'],
+            ];
+            const capexRows = rows.map(([name, val, ico]) => `
+                <tr>
+                    <td>${ico} ${name}</td>
+                    <td style="text-align:right;font-family:monospace;">${crFmt(val)}</td>
+                    <td style="text-align:right;color:#a0a8d4;">${pctFmt(val, CAPEX)}</td>
+                </tr>`).join('') + `
+                <tr style="background:rgba(102,126,234,0.15);font-weight:700;">
+                    <td>TOTAL CAPEX</td>
+                    <td style="text-align:right;font-family:monospace;color:#FFD700;">${crFmt(CAPEX)}</td>
+                    <td style="text-align:right;color:#FFD700;">100%</td>
+                </tr>`;
+
+            const npcRows = [
+                ['Initial CAPEX',                        CAPEX,    '#667eea'],
+                [`Battery Replacement (yr ${fp.bat_replace_yr})`, Bat_repl, '#fbbf24'],
+                ['Fuel Cell Replacement (yr 10)',         FC_repl,  '#fb923c'],
+                ['Electrolyzer Replacement (yr 15)',      EL_repl,  '#f87171'],
+                [`O&M over ${fp.lifetime} yrs`,           OM_PV,    '#34d399'],
+            ].map(([name, val, col]) => `
+                <tr>
+                    <td>${name}</td>
+                    <td style="text-align:right;font-family:monospace;color:${col};">${crFmt(val)}</td>
+                </tr>`).join('') + `
+                <tr style="background:rgba(255,215,0,0.1);font-weight:700;">
+                    <td>TOTAL NPC</td>
+                    <td style="text-align:right;font-family:monospace;color:#FFD700;">${crFmt(NPC)}</td>
+                </tr>`;
+
+            return `
+            <div class="card full-width" id="capex_npc_card">
+                <h2>💰 CAPEX &amp; Net Present Cost (NPC) Analysis</h2>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px;">
+                    <div style="${kpiStyle}">
+                        <div style="${kpiLabel}">Total CAPEX</div>
+                        <div style="${kpiVal}color:#667eea;">${crFmt(CAPEX)}</div>
+                    </div>
+                    <div style="${kpiStyle}">
+                        <div style="${kpiLabel}">Net Present Cost</div>
+                        <div style="${kpiVal}color:#FFD700;">${crFmt(NPC)}</div>
+                    </div>
+                    <div style="${kpiStyle}">
+                        <div style="${kpiLabel}">LCOE</div>
+                        <div style="${kpiVal}color:#38ef7d;">₹${LCOE.toFixed(2)}<span style="font-size:0.45em;color:#8b9dc3;">/kWh</span></div>
+                    </div>
+                    <div style="${kpiStyle}">
+                        <div style="${kpiLabel}">Annual O&amp;M</div>
+                        <div style="${kpiVal}color:#ff9f43;">${crFmt(OM_ann)}</div>
+                        <div style="font-size:0.75em;color:#8b9dc3;">per year</div>
+                    </div>
+                </div>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;">
+                    <div>
+                        <h3 style="color:#a78bfa;font-size:0.9em;margin-bottom:10px;letter-spacing:1px;">CAPEX BREAKDOWN</h3>
+                        <table style="width:100%;border-collapse:collapse;font-size:0.88em;">
+                            <thead><tr style="background:rgba(102,126,234,0.2);">
+                                <th style="text-align:left;padding:8px;">Component</th>
+                                <th style="text-align:right;padding:8px;">Cost</th>
+                                <th style="text-align:right;padding:8px;">Share</th>
+                            </tr></thead>
+                            <tbody>${capexRows}</tbody>
+                        </table>
+                    </div>
+                    <div>
+                        <h3 style="color:#a78bfa;font-size:0.9em;margin-bottom:10px;letter-spacing:1px;">NPC COMPONENTS</h3>
+                        <table style="width:100%;border-collapse:collapse;font-size:0.88em;">
+                            <thead><tr style="background:rgba(102,126,234,0.2);">
+                                <th style="text-align:left;padding:8px;">Item</th>
+                                <th style="text-align:right;padding:8px;">Value</th>
+                            </tr></thead>
+                            <tbody>${npcRows}</tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+                    <div id="capex_pie_chart" style="min-height:320px;"></div>
+                    <div id="npc_bar_chart"   style="min-height:320px;"></div>
+                </div>
+
+                <p style="margin-top:12px;font-size:0.78em;color:#606080;font-style:italic;">
+                    Financial params: Discount ${fp.discount_rate}% | Lifetime ${fp.lifetime} yr |
+                    O&amp;M ${fp.om_rate}% CAPEX/yr | Battery replacement yr ${fp.bat_replace_yr} |
+                    FC replacement yr 10 | EL replacement yr 15
+                </p>
+            </div>`;
+        }
+
+        function renderCapexCharts(bestX, rel) {
+            const c = computeCapexNpc(bestX, rel);
+            if (!c) return;
+            const { CAPEX, NPC, Cost_PV, Cost_WT, Cost_Bat, Cost_EL, Cost_H2, Cost_FC,
+                    Bat_repl, FC_repl, EL_repl, OM_PV, fp } = c;
+            const dark = { paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)', font:{color:'#fff'} };
+
+            // CAPEX pie
+            if (document.getElementById('capex_pie_chart')) {
+                Plotly.newPlot('capex_pie_chart', [{
+                    labels: ['PV', 'Wind', 'Battery', 'Electrolyzer', 'H2 Storage', 'Fuel Cell'],
+                    values: [Cost_PV, Cost_WT, Cost_Bat, Cost_EL, Cost_H2, Cost_FC],
+                    type: 'pie', hole: 0.42,
+                    marker: { colors: ['#FFD700','#00BFFF','#667eea','#38ef7d','#a78bfa','#ff6b6b'] },
+                    textinfo: 'label+percent', textfont: { color: '#fff', size: 11 },
+                }], { ...dark, title: { text:'CAPEX Distribution', font:{color:'#a78bfa',size:13} },
+                      margin:{t:40,b:10,l:10,r:10} }, { responsive:true, displayModeBar:false });
+            }
+
+            // NPC bar
+            if (document.getElementById('npc_bar_chart')) {
+                const labels = ['CAPEX', `Bat Repl\n(yr${fp.bat_replace_yr})`, 'FC Repl\n(yr10)', 'EL Repl\n(yr15)', `O&M\n(${fp.lifetime}yr PV)`];
+                const vals   = [CAPEX, Bat_repl, FC_repl, EL_repl, OM_PV].map(v => v/1e7);
+                Plotly.newPlot('npc_bar_chart', [{
+                    x: labels, y: vals, type: 'bar', name: 'Cr ₹',
+                    marker: { color: ['#667eea','#fbbf24','#fb923c','#f87171','#34d399'],
+                              opacity: 0.85, line: { width: 1, color: '#fff' } },
+                    text: vals.map(v => v.toFixed(2)+'Cr'), textposition: 'outside', textfont:{color:'#fff'},
+                }], { ...dark,
+                      title: { text:'NPC Cost Components (Cr ₹)', font:{color:'#a78bfa',size:13} },
+                      xaxis: { color:'#fff', gridcolor:'rgba(255,255,255,0.08)' },
+                      yaxis: { color:'#fff', gridcolor:'rgba(255,255,255,0.08)', title:'Crore ₹' },
+                      margin:{t:40,b:60,l:60,r:20} }, { responsive:true, displayModeBar:false });
+            }
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        //  PDF DOWNLOAD  (jsPDF + html2canvas via CDN)
+        // ══════════════════════════════════════════════════════════════════
+        async function downloadPDF() {
+            if (typeof window.jspdf === 'undefined' || typeof html2canvas === 'undefined') {
+                alert('PDF libraries still loading. Please wait a moment and try again.');
+                return;
+            }
+            const btn = document.getElementById('pdf_btn_full');
+            if (btn) { btn.textContent = '⏳ Generating...'; btn.disabled = true; }
+            try {
+                const { jsPDF } = window.jspdf;
+                const doc  = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+                const PW   = doc.internal.pageSize.getWidth();
+                const PH   = doc.internal.pageSize.getHeight();
+                const M    = 14, CW = PW - M * 2;
+                let y      = 0;
+
+                function newPage() { doc.addPage(); y = 22; drawPageHeader(); }
+                function drawPageHeader() {
+                    doc.setFillColor(15, 12, 41);
+                    doc.rect(0, 0, PW, 14, 'F');
+                    doc.setTextColor(255,255,255); doc.setFontSize(8); doc.setFont('helvetica','bold');
+                    doc.text('MPBSI Framework — Optimization Report', M, 9);
+                    doc.setFont('helvetica','normal');
+                    doc.drawRightString && doc.drawRightString(PW-M, 9, 'Grid-Independent Microgrid');
+                    doc.setTextColor(30,30,30);
+                }
+                function drawPageFooter(pn) {
+                    doc.setFillColor(240,240,248);
+                    doc.rect(0, PH-10, PW, 10, 'F');
+                    doc.setFontSize(7); doc.setFont('helvetica','normal'); doc.setTextColor(100,100,130);
+                    doc.text('Generated: ' + new Date().toLocaleString(), M, PH-3.5);
+                    doc.text('Page ' + pn, PW/2, PH-3.5, { align:'center' });
+                    doc.text('MPBSI Framework', PW-M, PH-3.5, { align:'right' });
+                    doc.setTextColor(30,30,30);
+                }
+                function sectionBar(title, r=80, g=60, b=180) {
+                    if (y > PH-50) newPage();
+                    doc.setFillColor(r,g,b);
+                    doc.roundedRect(M, y, CW, 9, 2, 2, 'F');
+                    doc.setTextColor(255,255,255); doc.setFontSize(11); doc.setFont('helvetica','bold');
+                    doc.text(title, M+4, y+6.5);
+                    doc.setTextColor(30,30,30); y += 13;
+                }
+                function kv(label, value) {
+                    if (y > PH-18) newPage();
+                    doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(80,80,120);
+                    doc.text(label + ':', M+3, y);
+                    doc.setFont('helvetica','normal'); doc.setTextColor(10,10,10);
+                    doc.text(String(value), M+75, y);
+                    y += 5.5;
+                }
+                function gap(mm=4) { y += mm; }
+
+                // ── COVER ──
+                doc.setFillColor(15,12,41); doc.rect(0,0,PW,PH,'F');
+                doc.setFillColor(102,126,234); doc.rect(0,PH-6,PW,6,'F');
+                doc.setTextColor(255,255,255); doc.setFontSize(26); doc.setFont('helvetica','bold');
+                doc.text('MPBSI Framework', PW/2, 72, {align:'center'});
+                doc.setFontSize(13); doc.setFont('helvetica','normal'); doc.setTextColor(180,180,220);
+                doc.text('Grid-Independent Renewable Microgrid', PW/2, 84, {align:'center'});
+                doc.text('Optimization Report', PW/2, 93, {align:'center'});
+
+                const mpbsiEl = document.getElementById('mpbsi-score');
+                const mpbsiVal = mpbsiEl ? parseFloat(mpbsiEl.textContent) || 0 : 0;
+                const sc = mpbsiVal>=0.8 ? [56,239,125] : mpbsiVal>=0.6 ? [255,215,0] : [255,107,107];
+                doc.setFillColor(20,18,50); doc.roundedRect(PW/2-40,100,80,40,4,4,'F');
+                doc.setDrawColor(...sc); doc.setLineWidth(1); doc.roundedRect(PW/2-40,100,80,40,4,4,'S');
+                doc.setTextColor(...sc); doc.setFontSize(9); doc.setFont('helvetica','bold');
+                doc.text('MPBSI SCORE', PW/2, 112, {align:'center'});
+                doc.setFontSize(28); doc.text(mpbsiVal.toFixed(4), PW/2, 130, {align:'center'});
+                doc.setFontSize(9); doc.setTextColor(160,160,200);
+                doc.text('Generated: ' + new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'}), PW/2, 158, {align:'center'});
+                drawPageFooter(1);
+
+                // ── PAGE 2: PERFORMANCE ──
+                doc.addPage(); y=22; drawPageHeader();
+                sectionBar('1. Performance Summary');
+                document.querySelectorAll('#results_container .metric-card').forEach(card => {
+                    const lbl = card.querySelector('.label')?.textContent?.trim();
+                    const val = card.querySelector('.value')?.textContent?.trim();
+                    if (lbl && val && !lbl.includes('⏳')) kv(lbl, val);
+                });
+
+                gap(6); sectionBar('2. Optimal Configuration', 50,110,60);
+                document.querySelectorAll('#results_container table tr').forEach((tr,i) => {
+                    if (i===0) return;
+                    const cells = tr.querySelectorAll('td');
+                    if (cells.length>=2) kv(cells[0].textContent.trim(), cells[1].textContent.trim());
+                });
+
+                // ── PAGE 3: CAPEX/NPC ──
+                if (y > PH-100) newPage(); else gap(6);
+                sectionBar('3. CAPEX & NPC Analysis', 140,100,20);
+
+                // KPI values
+                document.querySelectorAll('#capex_npc_card > div:first-of-type > div').forEach(kpi => {
+                    const lbl = kpi.querySelector('div:first-child')?.textContent?.trim();
+                    const val = kpi.querySelector('div:nth-child(2)')?.textContent?.trim();
+                    if (lbl && val) kv(lbl, val);
+                });
+                gap(4);
+
+                // CAPEX table
+                const capexTbl = document.querySelector('#capex_npc_card table:first-of-type');
+                if (capexTbl) {
+                    const rows = []; capexTbl.querySelectorAll('tr').forEach((tr,i) => {
+                        if (i===0) return;
+                        const cells = tr.querySelectorAll('td');
+                        if (cells.length>=2) rows.push([cells[0].textContent.trim(), cells[1].textContent.trim(), cells[2]?.textContent?.trim() || '']);
+                    });
+                    if (rows.length>0) {
+                        if (y>PH-80) newPage();
+                        doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(100,60,200);
+                        doc.text('CAPEX Breakdown', M+3, y); y+=5;
+                        rows.forEach((row,ri) => {
+                            if (y>PH-16) newPage();
+                            doc.setFillColor(ri%2===0?245:255, ri%2===0?245:255, ri%2===0?252:255);
+                            doc.rect(M, y-4, CW, 7, 'F');
+                            doc.setFontSize(8); doc.setFont('helvetica', ri===rows.length-1?'bold':'normal'); doc.setTextColor(10,10,10);
+                            doc.text(row[0], M+2, y); doc.text(row[1], M+85, y, {align:'right'}); doc.text(row[2], M+CW-2, y, {align:'right'});
+                            y+=7;
+                        });
+                    }
+                }
+                gap(4);
+                const npcTbl = document.querySelector('#capex_npc_card table:last-of-type');
+                if (npcTbl) {
+                    const rows = []; npcTbl.querySelectorAll('tr').forEach((tr,i) => {
+                        if (i===0) return;
+                        const cells = tr.querySelectorAll('td');
+                        if (cells.length>=2) rows.push([cells[0].textContent.trim(), cells[1].textContent.trim()]);
+                    });
+                    if (rows.length>0) {
+                        if (y>PH-80) newPage();
+                        doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(100,60,200);
+                        doc.text('NPC Components', M+3, y); y+=5;
+                        rows.forEach((row,ri) => {
+                            if (y>PH-16) newPage();
+                            doc.setFillColor(ri%2===0?245:255, ri%2===0?245:255, ri%2===0?252:255);
+                            doc.rect(M, y-4, CW, 7, 'F');
+                            doc.setFontSize(8); doc.setFont('helvetica', ri===rows.length-1?'bold':'normal'); doc.setTextColor(10,10,10);
+                            doc.text(row[0], M+2, y); doc.text(row[1], PW-M-2, y, {align:'right'});
+                            y+=7;
+                        });
+                    }
+                }
+
+                // ── Charts via html2canvas ──
+                const chartIds = [
+                    { id:'capex_pie_chart',  title:'CAPEX Distribution' },
+                    { id:'npc_bar_chart',    title:'NPC Cost Components' },
+                ];
+                for (const { id, title } of chartIds) {
+                    const el = document.getElementById(id);
+                    if (!el) continue;
+                    try {
+                        const canvas = await html2canvas(el, { backgroundColor:'#1a1a2e', scale:1.5, useCORS:true, logging:false });
+                        if (y > PH-100) newPage(); else gap(6);
+                        doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(80,80,160);
+                        doc.text(title, M+3, y); y+=4;
+                        const iw = CW * 0.9, ih = (canvas.height/canvas.width)*iw;
+                        if (y+ih > PH-16) newPage();
+                        doc.addImage(canvas.toDataURL('image/png'), 'PNG', M+(CW-iw)/2, y, iw, ih);
+                        y += ih + 6;
+                    } catch(e) { console.warn('Chart capture failed:', id, e); }
+                }
+
+                // ── Page numbers ──
+                const total = doc.internal.getNumberOfPages();
+                for (let p=2; p<=total; p++) { doc.setPage(p); drawPageFooter(p); }
+
+                doc.save('MPBSI_Report_' + new Date().toISOString().slice(0,10) + '.pdf');
+            } catch(err) {
+                alert('PDF error: ' + err.message + '\n\nTry the Quick Summary PDF instead.');
+                console.error(err);
+            } finally {
+                if (btn) { btn.textContent = '⬇️ Download Full PDF'; btn.disabled = false; }
+            }
+        }
+
+        async function downloadPDFQuick() {
+            if (typeof window.jspdf === 'undefined') {
+                alert('PDF library still loading. Please wait and try again.');
+                return;
+            }
+            try {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+                const PW  = doc.internal.pageSize.getWidth();
+                const PH  = doc.internal.pageSize.getHeight();
+                const M   = 14, CW = PW - M*2;
+                let y = 18;
+
+                doc.setFillColor(50,30,100); doc.rect(0,0,PW,14,'F');
+                doc.setTextColor(255,255,255); doc.setFontSize(9); doc.setFont('helvetica','bold');
+                doc.text('MPBSI Framework — Quick Summary', M, 9);
+                doc.text(new Date().toLocaleDateString(), PW-M, 9, {align:'right'});
+
+                doc.setTextColor(50,30,100); doc.setFontSize(17);
+                doc.text('MPBSI Optimization Report', PW/2, y+8, {align:'center'}); y+=18;
+
+                const mpbsiEl = document.getElementById('mpbsi-score');
+                const mpbsiVal = mpbsiEl ? parseFloat(mpbsiEl.textContent)||0 : 0;
+                const sc = mpbsiVal>=0.8?[56,239,125]:mpbsiVal>=0.6?[200,160,0]:[200,60,60];
+                doc.setFillColor(...sc); doc.roundedRect(M,y,CW,12,3,3,'F');
+                doc.setTextColor(10,10,10); doc.setFontSize(11); doc.setFont('helvetica','bold');
+                doc.text('MPBSI Score: ' + mpbsiVal.toFixed(4), PW/2, y+8.5, {align:'center'}); y+=17;
+
+                function section(title, r=100,g=80,b=220) {
+                    y+=4;
+                    doc.setFillColor(r,g,b); doc.rect(M,y,CW,7.5,'F');
+                    doc.setTextColor(255,255,255); doc.setFontSize(10); doc.setFont('helvetica','bold');
+                    doc.text(title, M+3, y+5.5); doc.setTextColor(20,20,20); y+=11;
+                }
+                function row(lbl, val) {
+                    if (y>PH-18) { doc.addPage(); y=18; }
+                    doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(80,80,120);
+                    doc.text(lbl+':', M+3, y);
+                    doc.setFont('helvetica','normal'); doc.setTextColor(10,10,10);
+                    doc.text(String(val), M+75, y); y+=5.5;
+                }
+
+                section('Performance Metrics', 80,60,180);
+                document.querySelectorAll('#results_container .metric-card').forEach(card => {
+                    const lbl = card.querySelector('.label')?.textContent?.trim();
+                    const val = card.querySelector('.value')?.textContent?.trim();
+                    if (lbl && val && !lbl.includes('⏳') && lbl!=='MPBSI Score') row(lbl, val);
+                });
+
+                section('CAPEX & NPC', 140,100,20);
+                document.querySelectorAll('#capex_npc_card > div:first-of-type > div').forEach(kpi => {
+                    const lbl = kpi.querySelector('div:first-child')?.textContent?.trim();
+                    const val = kpi.querySelector('div:nth-child(2)')?.textContent?.trim();
+                    if (lbl && val) row(lbl, val);
+                });
+
+                section('Optimal Configuration', 50,110,60);
+                document.querySelectorAll('#results_container table tr').forEach((tr,i) => {
+                    if (i===0) return;
+                    const cells = tr.querySelectorAll('td');
+                    if (cells.length>=2) row(cells[0].textContent.trim(), cells[1].textContent.trim());
+                });
+
+                const total = doc.internal.getNumberOfPages();
+                for (let p=1; p<=total; p++) {
+                    doc.setPage(p);
+                    doc.setFillColor(240,240,248); doc.rect(0,PH-9,PW,9,'F');
+                    doc.setFontSize(7); doc.setFont('helvetica','normal'); doc.setTextColor(100,100,130);
+                    doc.text('MPBSI Framework | Page '+p+' / '+total, PW/2, PH-3.5, {align:'center'});
+                }
+                doc.save('MPBSI_Quick_' + new Date().toISOString().slice(0,10) + '.pdf');
+            } catch(err) { alert('Quick PDF error: ' + err.message); }
+        }
+
+    </script>
+</body>
+</html>

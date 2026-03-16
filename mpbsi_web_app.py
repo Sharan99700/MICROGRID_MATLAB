@@ -1,0 +1,1438 @@
+"""
+MPBSI Framework — mpbsi_web_app.py  (v6 — Sidebar Configuration)
+=============================================================================
+All controls are in the sidebar. Main area shows hero + dashboard + results.
+Premium dark-tech aesthetic with glassmorphism cards.
+
+Folder layout:
+    mpbsi_web_app.py
+    mpbsi_backend.py
+    mpbsi_complete_web.html
+
+Run:
+    streamlit run mpbsi_web_app.py
+"""
+
+import json
+import sys
+import time
+import traceback
+from pathlib import Path
+from io import BytesIO
+from datetime import datetime
+
+import streamlit as st
+import streamlit.components.v1 as components
+
+# ── Robust path setup — ensures mpbsi_backend.py is importable ───────────────
+_THIS_DIR = Path(__file__).resolve().parent
+if str(_THIS_DIR) not in sys.path:
+    sys.path.insert(0, str(_THIS_DIR))
+
+# ── Import backend ────────────────────────────────────────────────────────────
+# VAR_NAMES is defined here as fallback so the app works even with older backends
+VAR_NAMES = ["PV_kWp", "Wind_kW", "Battery_kWh", "Electrolyzer_kW", "H2_kWh", "FuelCell_kW"]
+
+try:
+    from mpbsi_backend import run_pipeline
+    # Also try to import VAR_NAMES from backend (newer versions have it)
+    try:
+        from mpbsi_backend import VAR_NAMES as _VAR_NAMES_BACKEND
+        VAR_NAMES = _VAR_NAMES_BACKEND
+    except ImportError:
+        pass  # use the fallback defined above
+    BACKEND_OK = True
+except ImportError as _e:
+    BACKEND_OK = False
+    _IMPORT_ERROR = str(_e)
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  PAGE CONFIG
+# ══════════════════════════════════════════════════════════════════════════════
+st.set_page_config(
+    page_title="MPBSI Framework",
+    page_icon="⚡",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  GLOBAL STYLES — dark tech + glassmorphism
+# ══════════════════════════════════════════════════════════════════════════════
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, [data-testid="stApp"] {
+    background: #060a14 !important;
+    font-family: 'Space Grotesk', sans-serif !important;
+    color: #c8d0e8 !important;
+}
+
+#MainMenu, footer, header { visibility: hidden !important; }
+
+.block-container { padding: 0 !important; max-width: 100% !important; }
+.stMainBlockContainer { padding: 0 2rem 2rem 2rem !important; max-width: 100% !important; }
+
+/* ── Sidebar styling ── */
+section[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #0a0d1f 0%, #0f0c29 50%, #0d1230 100%) !important;
+    border-right: 1px solid rgba(102,126,234,0.2) !important;
+    min-width: 300px !important;
+}
+section[data-testid="stSidebar"] > div:first-child {
+    padding: 0 8px 16px 8px !important;
+}
+[data-testid="stSidebarContent"] {
+    padding: 0 !important;
+    overflow-y: auto !important;
+}
+/* make sure markdown HTML blocks in sidebar are visible */
+section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] {
+    width: 100% !important;
+}
+section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] > div {
+    width: 100% !important;
+}
+
+/* sidebar body padding */
+.sb-body { padding: 0 16px 16px; }
+
+/* override Streamlit's sidebar widget colours */
+section[data-testid="stSidebar"] [data-testid="stRadio"] label { color: #c8d0e8 !important; }
+section[data-testid="stSidebar"] label { color: #a0a8d4 !important; font-size: 0.88em !important; }
+section[data-testid="stSidebar"] [data-testid="stSlider"] { margin-bottom: 4px !important; }
+section[data-testid="stSidebar"] .stSlider > div > div > div[role="slider"] {
+    background: #a78bfa !important;
+}
+section[data-testid="stSidebar"] [data-testid="stNumberInput"] input {
+    background: rgba(102,126,234,0.1) !important;
+    border: 1px solid rgba(102,126,234,0.25) !important;
+    border-radius: 8px !important; color: #e0e6ff !important;
+}
+section[data-testid="stSidebar"] [data-testid="stFileUploader"] {
+    background: rgba(102,126,234,0.07) !important;
+    border: 1.5px dashed rgba(102,126,234,0.35) !important; border-radius: 12px !important;
+}
+section[data-testid="stSidebar"] div[data-testid="stExpander"] {
+    background: rgba(102,126,234,0.06) !important;
+    border: 1px solid rgba(102,126,234,0.15) !important; border-radius: 12px !important;
+}
+section[data-testid="stSidebar"] div[data-testid="stExpander"] summary {
+    font-weight: 600 !important; color: #a78bfa !important;
+}
+section[data-testid="stSidebar"] div[data-testid="stButton"] > button {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    border: none !important; border-radius: 12px !important;
+    font-weight: 700 !important; color: #fff !important;
+    box-shadow: 0 4px 18px rgba(102,126,234,0.4) !important;
+    width: 100% !important;
+}
+section[data-testid="stSidebar"] div[data-testid="stButton"] > button:hover {
+    box-shadow: 0 6px 26px rgba(102,126,234,0.65) !important;
+    transform: translateY(-1px) !important;
+}
+section[data-testid="stSidebar"] div[data-testid="stDivider"] {
+    border-color: rgba(102,126,234,0.15) !important;
+}
+
+/* ── Hero header ── */
+.mpbsi-hero {
+    background: linear-gradient(135deg, #0d1b3e 0%, #0f0c29 40%, #1a0533 100%);
+    border-bottom: 1px solid rgba(102,126,234,0.25);
+    padding: 28px 40px 22px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    margin-bottom: 0;
+    position: relative;
+    overflow: hidden;
+}
+.mpbsi-hero::before {
+    content: '';
+    position: absolute; top: -60px; left: -60px;
+    width: 320px; height: 320px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(102,126,234,0.18) 0%, transparent 70%);
+    pointer-events: none;
+}
+.mpbsi-hero::after {
+    content: '';
+    position: absolute; bottom: -80px; right: 80px;
+    width: 260px; height: 260px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(118,75,162,0.14) 0%, transparent 70%);
+    pointer-events: none;
+}
+.hero-title {
+    font-size: 2.1em; font-weight: 700;
+    background: linear-gradient(135deg, #a78bfa 0%, #60a5fa 60%, #34d399 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text; line-height: 1.1; margin: 0;
+}
+.hero-sub { color: rgba(200,208,232,0.6); font-size: 0.88em; font-weight: 400;
+            letter-spacing: 0.5px; margin-top: 4px; }
+.hero-badge {
+    background: linear-gradient(135deg, rgba(102,126,234,0.25), rgba(118,75,162,0.25));
+    border: 1px solid rgba(102,126,234,0.4); border-radius: 24px;
+    padding: 8px 18px; font-size: 0.82em; font-weight: 600;
+    color: #a78bfa; white-space: nowrap; font-family: 'JetBrains Mono', monospace;
+}
+
+/* ── Section label ── */
+.section-label {
+    font-size: 0.75em; font-weight: 700; letter-spacing: 2px;
+    text-transform: uppercase; color: rgba(167,139,250,0.7);
+    margin: 0 0 10px 0; display: flex; align-items: center; gap: 8px;
+}
+.section-label::after {
+    content: ''; flex: 1; height: 1px;
+    background: linear-gradient(90deg, rgba(102,126,234,0.3), transparent);
+}
+
+/* ── Metric mini-cards ── */
+.m-card {
+    background: linear-gradient(135deg, rgba(15,20,50,0.95), rgba(25,15,45,0.9));
+    border: 1px solid rgba(102,126,234,0.22); border-radius: 14px;
+    padding: 16px 20px; text-align: center;
+    position: relative; overflow: hidden;
+    transition: border-color 0.3s, transform 0.2s;
+}
+.m-card:hover { border-color: rgba(102,126,234,0.5); transform: translateY(-2px); }
+.m-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: var(--accent, linear-gradient(90deg, #667eea, #764ba2));
+}
+.m-label { font-size: 0.72em; font-weight: 600; letter-spacing: 1px;
+           text-transform: uppercase; color: rgba(160,168,212,0.8); margin-bottom: 8px; }
+.m-val { font-size: 1.85em; font-weight: 700; line-height: 1;
+         font-family: 'JetBrains Mono', monospace; }
+.m-unit { font-size: 0.72em; color: rgba(160,168,212,0.6); margin-top: 4px; }
+
+/* ── Status banner ── */
+.status-banner {
+    border-radius: 12px; padding: 14px 22px;
+    font-weight: 600; font-size: 1em;
+    display: flex; align-items: center; gap: 10px; margin-bottom: 20px;
+}
+.status-ok  { background:rgba(56,239,125,0.1); border:1px solid rgba(56,239,125,0.35); color:#38ef7d; }
+.status-err { background:rgba(255,107,107,0.1); border:1px solid rgba(255,107,107,0.35); color:#ff6b6b; }
+
+/* ── Storage progress bars ── */
+.storage-bar { height:10px; border-radius:6px; background:rgba(255,255,255,0.07); overflow:hidden; margin:6px 0; }
+.storage-fill { height:100%; border-radius:6px; transition:width 0.8s ease; }
+.adequacy-bar { background:rgba(255,255,255,0.07); border-radius:8px; height:12px; overflow:hidden; margin:8px 0; }
+
+/* ── Result table ── */
+.res-table { width:100%; border-collapse:collapse; font-size:0.92em; }
+.res-table th {
+    background:rgba(102,126,234,0.15); color:#a78bfa; padding:10px 14px;
+    text-align:left; font-weight:600; font-size:0.8em; letter-spacing:1px;
+    text-transform:uppercase; border-bottom:1px solid rgba(102,126,234,0.25);
+}
+.res-table td { padding:10px 14px; border-bottom:1px solid rgba(102,126,234,0.08); color:#c8d0e8; }
+.res-table tr:last-child td { border-bottom:none; }
+.res-table tr:hover td { background:rgba(102,126,234,0.06); }
+.val-mono { font-family:'JetBrains Mono',monospace; color:#60a5fa; font-weight:600; }
+
+/* ── Streamlit widget theme overrides ── */
+div[data-testid="stButton"] > button[kind="primary"] {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    border: none !important; border-radius: 12px !important;
+    padding: 14px 32px !important; font-size: 1.05em !important;
+    font-weight: 700 !important; color: #fff !important;
+    box-shadow: 0 4px 20px rgba(102,126,234,0.45) !important;
+    transition: all 0.3s !important; width: 100% !important;
+}
+div[data-testid="stButton"] > button[kind="primary"]:hover {
+    box-shadow: 0 6px 28px rgba(102,126,234,0.7) !important;
+    transform: translateY(-2px) !important;
+}
+
+[data-testid="stMetric"] {
+    background: linear-gradient(135deg, rgba(15,20,50,0.8), rgba(25,15,45,0.7)) !important;
+    border: 1px solid rgba(102,126,234,0.2) !important;
+    border-radius: 12px !important; padding: 14px 16px !important;
+}
+[data-testid="stMetricLabel"] { color: #a0a8d4 !important; font-size: 0.8em !important; }
+[data-testid="stMetricValue"] { color: #e0e6ff !important; font-family: 'JetBrains Mono', monospace !important; }
+
+[data-testid="stTabs"] [data-baseweb="tab-list"] {
+    background: rgba(10,12,30,0.8) !important; border-radius: 12px !important;
+    padding: 4px !important; gap: 4px !important;
+    border: 1px solid rgba(102,126,234,0.15) !important;
+}
+[data-testid="stTabs"] [data-baseweb="tab"] {
+    border-radius: 10px !important; color: rgba(160,168,212,0.7) !important;
+    font-weight: 600 !important; padding: 8px 20px !important;
+}
+[data-testid="stTabs"] [aria-selected="true"] {
+    background: linear-gradient(135deg, #667eea, #764ba2) !important; color: #fff !important;
+}
+
+div[data-testid="stExpander"] {
+    background: rgba(102,126,234,0.06) !important;
+    border: 1px solid rgba(102,126,234,0.15) !important; border-radius: 12px !important;
+}
+div[data-testid="stExpander"] summary { font-weight: 600 !important; color: #a78bfa !important; }
+
+[data-testid="stFileUploader"] {
+    background: rgba(102,126,234,0.07) !important;
+    border: 1.5px dashed rgba(102,126,234,0.35) !important; border-radius: 12px !important;
+}
+[data-testid="stRadio"] label { color: #c8d0e8 !important; }
+div[data-testid="stDivider"] { border-color: rgba(102,126,234,0.15) !important; }
+.stAlert { border-radius: 12px !important; }
+.stProgress > div > div { background: linear-gradient(90deg, #667eea, #38ef7d) !important; border-radius: 8px !important; }
+</style>
+""", unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  BACKEND GUARD
+# ══════════════════════════════════════════════════════════════════════════════
+if not BACKEND_OK:
+    st.markdown(f"""
+<div style="min-height:100vh; display:flex; align-items:center; justify-content:center; padding:40px;">
+  <div style="max-width:620px; text-align:center;">
+    <div style="font-size:3em; margin-bottom:16px;">⚡</div>
+    <h2 style="color:#ff6b6b; margin-bottom:12px;">Backend Not Found</h2>
+    <p style="color:rgba(200,208,232,0.6); margin-bottom:12px;">
+      Cannot import <code>mpbsi_backend.py</code>. All three files must be in the <strong>same folder</strong>.
+    </p>
+    <pre style="background:rgba(102,126,234,0.1); border:1px solid rgba(102,126,234,0.3);
+                border-radius:12px; padding:16px; text-align:left; font-size:0.9em; color:#a78bfa;">
+your-folder/
+├── mpbsi_web_app.py
+├── mpbsi_backend.py
+└── mpbsi_complete_web.html</pre>
+    <p style="color:rgba(200,208,232,0.4); font-size:0.82em; margin-top:16px;">
+      Run from that folder: &nbsp;<code>streamlit run mpbsi_web_app.py</code>
+    </p>
+    <details style="margin-top:14px; text-align:left;">
+      <summary style="color:#a78bfa; cursor:pointer; font-size:0.85em;">Show error details</summary>
+      <pre style="background:rgba(255,60,60,0.08); border:1px solid rgba(255,60,60,0.2);
+                  border-radius:8px; padding:12px; font-size:0.8em; color:#ff9999; margin-top:8px;">
+Import error: {_IMPORT_ERROR}
+Script dir:   {_THIS_DIR}
+sys.path[0]:  {sys.path[0]}</pre>
+    </details>
+  </div>
+</div>""", unsafe_allow_html=True)
+    st.stop()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  HERO HEADER
+# ══════════════════════════════════════════════════════════════════════════════
+st.markdown("""
+<div class="mpbsi-hero">
+  <div>
+    <div class="hero-title">⚡ MPBSI Framework</div>
+    <div class="hero-sub">Mission-Priority Benchmark Sustainability Index · Grid-Independent Renewable Microgrids</div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  SIDEBAR — All configuration controls
+# ══════════════════════════════════════════════════════════════════════════════
+with st.sidebar:
+
+    # ── Header (native) ──
+    st.markdown("## ⚡ MPBSI Framework")
+    st.caption("Mission-Priority Benchmark Sustainability Index")
+    st.markdown(
+        '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 12px;">'
+        '<span style="background:rgba(102,126,234,0.18);border:1px solid rgba(102,126,234,0.4);'
+        'border-radius:20px;padding:3px 10px;font-size:0.72em;font-weight:600;color:#a78bfa;">PSO · NSGA-II</span>'
+        '<span style="background:rgba(102,126,234,0.18);border:1px solid rgba(102,126,234,0.4);'
+        'border-radius:20px;padding:3px 10px;font-size:0.72em;font-weight:600;color:#a78bfa;">130+ Locations</span>'
+        '<span style="background:rgba(102,126,234,0.18);border:1px solid rgba(102,126,234,0.4);'
+        'border-radius:20px;padding:3px 10px;font-size:0.72em;font-weight:600;color:#a78bfa;">v6.0</span>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+    st.divider()
+
+    # ── Dataset ──
+    st.markdown("##### 📂 Dataset")
+    uploaded_file = st.file_uploader(
+        "Upload dataset (XLSX, XLS or CSV · 8760 hourly rows)",
+        type=["xlsx", "xls", "csv"],
+        help="Required columns: GHI_Wh_m2, WindSpeed_10m_mps, Temperature_C, Load_kW",
+        label_visibility="visible",
+    )
+    if uploaded_file:
+        st.success(f"✅ **{uploaded_file.name}**")
+    else:
+        st.info("⬆️ Upload a dataset to enable the pipeline.")
+
+    st.divider()
+
+    # ── Mode ──
+    st.markdown("##### 🎯 Optimisation Mode")
+    mode = st.radio(
+        "Mode",
+        ["Mission", "Resource"],
+        horizontal=True,
+        index=0,
+        label_visibility="collapsed",
+        help=(
+            "**Mission Mode** — Military doctrine: hard 7-day autonomy constraint, "
+            "LPSP ≤ 1e-4, REN ≥ 99.9%. Weights: ESI 30% | EcSI 25% | TRI 15% | ORI 15% | LSI 15%.\n\n"
+            "**Resource Mode** — Grid-tied / peacetime: no hard autonomy limit (smooth reward), "
+            "LPSP ≤ 1e-4, 100% renewable. Weights: ESI 5% | EcSI 20% | TRI 30% | ORI 25% | LSI 20%."
+        ),
+    )
+    mode_key = mode.lower()  # "mission" or "resource"
+
+    # Mode info badge
+    if mode == "Mission":
+        st.markdown(
+            "<div style='background:rgba(167,139,250,0.10);border:1px solid rgba(167,139,250,0.3);"
+            "border-radius:8px;padding:8px 12px;font-size:0.78em;color:#a78bfa;margin-bottom:4px;'>"
+            "⚔️ <b>Mission Mode</b> — 7-day autonomy hard constraint · Military doctrine weights"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            "<div style='background:rgba(56,239,125,0.08);border:1px solid rgba(56,239,125,0.25);"
+            "border-radius:8px;padding:8px 12px;font-size:0.78em;color:#38ef7d;margin-bottom:4px;'>"
+            "🌿 <b>Resource Mode</b> — No autonomy hard limit · Hub-height wind correction · Economic weights"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
+    st.divider()
+
+    # ── Algorithm ──
+    st.markdown("##### 🚀 Algorithm")
+    algo = st.radio("Algorithm", ["PSO", "NSGA-II"], horizontal=True,
+                    index=0, label_visibility="collapsed")
+    if algo == "PSO":
+        n_pop   = st.slider("Swarm size (nPop)",    5, 100, 30,   key="pso_np")   # MATLAB: nPop=30
+        max_it  = st.slider("Max iterations",       5, 200, 80,   key="pso_it")   # MATLAB: MaxIt=80
+        pso_w   = st.slider("Inertia w",          0.1, 1.0, 0.8, 0.05, key="pso_w")
+        pso_wdamp = st.slider("Inertia damping",  0.90, 1.0, 0.98, 0.01, key="pso_wdamp")
+        pso_c1  = st.slider("Cognitive c1",       0.5, 3.0, 1.5, 0.1,  key="pso_c1")
+        pso_c2  = st.slider("Social c2",          0.5, 3.0, 1.5, 0.1,  key="pso_c2")
+    else:
+        n_pop   = st.slider("Population",  10, 200, 80, key="ng_np")   # MATLAB: PopulationSize=80
+        max_it  = st.slider("Generations",  5, 100, 60, key="ng_it")   # MATLAB: MaxGenerations=60
+        pso_w   = 0.8; pso_wdamp = 0.98; pso_c1 = 1.5; pso_c2 = 1.5
+    seed = st.number_input("Random seed", 0, 9999, 42)
+    st.markdown("##### 🏗️ Site Parameters")
+    land_m2 = st.number_input(
+        "Available Land Area (m²)",
+        min_value=1000, max_value=500_000, value=50_000, step=1000,
+        help="Used to compute physics-derived PSO bounds (MATLAB: PV_max=Land/10, Wind_max=Land/15)"
+    )
+    st.caption(f"→ PV_max ≈ {land_m2//10:,} kWp | Wind_max ≈ {land_m2//15:,} kW")
+
+    st.divider()
+
+    # ── Variable Bounds ──
+    st.markdown("##### 📐 Variable Bounds (Override)")
+    st.caption("⚠️ Leave at defaults — PSO uses physics-derived bounds from land area above. Only override for custom experiments.")
+    with st.expander("⚡ PV & Wind", expanded=True):
+        b1, b2 = st.columns(2)
+        pv_min  = b1.number_input("PV Min",   0,  5000,   300,  50, help="kWp")
+        pv_max  = b2.number_input("PV Max",   0,  5000,  1200,  50, help="kWp")
+        wn_min  = b1.number_input("Wind Min", 0,  2000,     0,  50, help="kW")
+        wn_max  = b2.number_input("Wind Max", 0,  2000,   500,  50, help="kW")
+    with st.expander("🔋 Battery & Hydrogen"):
+        b1, b2 = st.columns(2)
+        bt_min  = b1.number_input("Batt Min", 0, 200_000, 10_000, 1000, help="kWh")
+        bt_max  = b2.number_input("Batt Max", 0, 200_000, 65_000, 1000, help="kWh")
+        h2_min  = b1.number_input("H₂ Min",   0, 500_000, 10_000, 1000, help="kWh")
+        h2_max  = b2.number_input("H₂ Max",   0, 500_000, 80_000, 1000, help="kWh")
+    with st.expander("⚗️ Electrolyser & Fuel Cell"):
+        b1, b2 = st.columns(2)
+        el_min  = b1.number_input("Elec Min", 0,  2000,    50,  50, help="kW")
+        el_max  = b2.number_input("Elec Max", 0,  2000,   500,  50, help="kW")
+        fc_min  = b1.number_input("FC Min",   0,  2000,   100,  50, help="kW")
+        fc_max  = b2.number_input("FC Max",   0,  2000,   600,  50, help="kW")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── Run button ──
+    run_btn = st.button(
+        f"🚀  Run {algo} Pipeline",
+        type="primary",
+        use_container_width=True,
+        disabled=uploaded_file is None,
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  HTML IFRAME
+# ══════════════════════════════════════════════════════════════════════════════
+st.markdown('<div class="section-label">🖥️ Interactive Dashboard</div>', unsafe_allow_html=True)
+
+html_file = Path(__file__).parent / "mpbsi_complete_web.html"
+if not html_file.exists():
+    html_file = Path("mpbsi_complete_web.html")
+
+if html_file.exists():
+    html_raw = html_file.read_text(encoding="utf-8")
+
+    # ── Inject sidebar file into HTML iframe ──────────────────────────────────
+    file_inject_script = ""
+    if uploaded_file is not None:
+        import base64
+        file_b64 = base64.b64encode(uploaded_file.getvalue()).decode("utf-8")
+        file_name = uploaded_file.name.replace("\\", "\\\\").replace("`", "\\`").replace("$", "\\$")
+        file_inject_script = f"""
+<script>
+(function(){{
+    function tryInjectFile() {{
+        if (window.receiveFileFromSidebar) {{
+            window.receiveFileFromSidebar(`{file_b64}`, `{file_name}`);
+        }} else {{
+            setTimeout(tryInjectFile, 300);
+        }}
+    }}
+    if (document.readyState === 'complete') {{ setTimeout(tryInjectFile, 500); }}
+    else {{ window.addEventListener('load', function() {{ setTimeout(tryInjectFile, 500); }}); }}
+}})();
+</script>"""
+
+    results_in_session = st.session_state.get("mpbsi_results")
+    if results_in_session:
+        try:
+            payload_json    = json.dumps(results_in_session, default=str)
+            payload_escaped = (payload_json
+                               .replace("\\", "\\\\")
+                               .replace("`",  "\\`")
+                               .replace("$",  "\\$"))
+            inject_script = f"""
+<script>
+(function(){{
+    function tryInject() {{
+        if (window.receiveBackendResults) {{
+            try {{
+                var data = JSON.parse(`{payload_escaped}`);
+                window.receiveBackendResults(data);
+                console.log('✅ MPBSI injected, MPBSI=', data&&data.optimization?data.optimization.best_mpbsi:'?');
+            }} catch(e) {{ console.error('inject error:', e); }}
+        }} else {{ setTimeout(tryInject, 300); }}
+    }}
+    if (document.readyState === 'complete') {{ setTimeout(tryInject, 400); }}
+    else {{ window.addEventListener('load', function() {{ setTimeout(tryInject, 400); }}); }}
+}})();
+</script>"""
+            if "</body>" in html_raw:
+                html_raw = html_raw.replace("</body>", inject_script + "\n</body>")
+            else:
+                html_raw += inject_script
+        except Exception:
+            pass
+
+    # Always inject sidebar file script (even without results)
+    if file_inject_script:
+        if "</body>" in html_raw:
+            html_raw = html_raw.replace("</body>", file_inject_script + "\n</body>")
+        else:
+            html_raw += file_inject_script
+
+    # Inject mode sync — keeps HTML tile in sync with sidebar radio
+    mode_sync_script = f"""
+<script>
+(function(){{
+    function syncMode() {{
+        if (window.setMode) {{
+            window.setMode('{mode_key}');
+        }} else {{
+            setTimeout(syncMode, 300);
+        }}
+    }}
+    if (document.readyState === 'complete') {{ setTimeout(syncMode, 400); }}
+    else {{ window.addEventListener('load', function() {{ setTimeout(syncMode, 400); }}); }}
+}})();
+</script>"""
+    if "</body>" in html_raw:
+        html_raw = html_raw.replace("</body>", mode_sync_script + "\n</body>")
+    else:
+        html_raw += mode_sync_script
+
+    # Inject auto-resize script so iframe shrinks to content after results load
+    resize_script = """
+<script>
+(function() {
+    function fitHeight() {
+        try {
+            if (window.frameElement) {
+                var h = document.documentElement.scrollHeight;
+                window.frameElement.style.height = (h + 20) + 'px';
+            }
+        } catch(e) {}
+    }
+    // Run once on load only — NOT on every DOM mutation to avoid scroll jumps
+    window.addEventListener('load', function() {
+        setTimeout(fitHeight, 2000);
+    });
+    // Expose for manual call after charts render
+    window.fitIframeHeight = fitHeight;
+})();
+</script>"""
+
+    if "</body>" in html_raw:
+        html_raw = html_raw.replace("</body>", resize_script + "\n</body>")
+    else:
+        html_raw += resize_script
+
+    components.html(html_raw, height=5200, scrolling=True)
+else:
+    st.error("❌ `mpbsi_complete_web.html` not found in the same folder as this script.")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  PDF REPORT GENERATOR
+# ══════════════════════════════════════════════════════════════════════════════
+def generate_pdf_report(results: dict) -> bytes:
+    """Generate a professional PDF report using reportlab. Returns bytes."""
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.units import mm
+        from reportlab.lib import colors
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+        from reportlab.platypus import (
+            SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
+            HRFlowable, PageBreak, KeepTogether
+        )
+        from reportlab.graphics.shapes import Drawing, Rect, String
+        from reportlab.graphics import renderPDF
+    except ImportError:
+        return None  # reportlab not installed
+
+    opt     = results.get("optimization", {})
+    steps   = results.get("steps", {})
+    mpbsi   = opt.get("best_mpbsi", 0.0)
+    feasible= opt.get("feasible", False)
+    pillars = opt.get("best_pillars", {})
+    best_x  = opt.get("best_x", [])
+    rel     = opt.get("reliability_metrics", {})
+    conv    = opt.get("convergence", [])
+    runtime = results.get("total_runtime_seconds", opt.get("runtime_seconds", 0))
+    algo    = opt.get("algorithm", "PSO")
+    var_names = ["PV (kWp)", "Wind (kW)", "Battery (kWh)",
+                 "Electrolyzer (kW)", "H2 Storage (kWh)", "Fuel Cell (kW)"]
+    # ── Colour palette ──
+    COL_BG      = colors.HexColor("#0f0c29")
+    COL_ACCENT  = colors.HexColor("#667eea")
+    COL_PURPLE  = colors.HexColor("#764ba2")
+    COL_GREEN   = colors.HexColor("#38ef7d")
+    COL_YELLOW  = colors.HexColor("#FFD700")
+    COL_RED     = colors.HexColor("#ff6b6b")
+    COL_CYAN    = colors.HexColor("#00BFFF")
+    COL_WHITE   = colors.white
+    COL_LGRAY   = colors.HexColor("#f0f0f8")
+    COL_DGRAY   = colors.HexColor("#2a2a4a")
+    COL_TEXT    = colors.HexColor("#1a1a2e")
+    COL_SUBTEXT = colors.HexColor("#555577")
+    score_col   = COL_GREEN if mpbsi >= 0.8 else COL_YELLOW if mpbsi >= 0.6 else COL_RED
+
+    buf = BytesIO()
+    page_w, page_h = A4
+
+    # ── Styles ──
+    styles = getSampleStyleSheet()
+    def style(name, **kw):
+        s = ParagraphStyle(name, parent=styles['Normal'], **kw)
+        return s
+
+    S_TITLE    = style('title',    fontSize=24, textColor=COL_WHITE,
+                       alignment=TA_CENTER, fontName='Helvetica-Bold', leading=30)
+    S_SUBTITLE = style('subtitle', fontSize=12, textColor=colors.HexColor("#c0c0e0"),
+                       alignment=TA_CENTER, fontName='Helvetica', leading=16)
+    S_H1       = style('h1',       fontSize=13, textColor=COL_ACCENT,
+                       fontName='Helvetica-Bold', spaceBefore=6, spaceAfter=4)
+    S_H2       = style('h2',       fontSize=10, textColor=COL_SUBTEXT,
+                       fontName='Helvetica-Bold', spaceBefore=4, spaceAfter=2)
+    S_BODY     = style('body',     fontSize=9,  textColor=COL_TEXT, leading=13)
+    S_SMALL    = style('small',    fontSize=8,  textColor=COL_SUBTEXT, leading=11)
+    S_CENTER   = style('center',   fontSize=9,  textColor=COL_TEXT,
+                       alignment=TA_CENTER, leading=13)
+    S_MONO     = style('mono',     fontSize=9,  fontName='Courier', textColor=COL_TEXT)
+
+    # ── Table helpers ──
+    def kv_table(rows, col_w=(120*mm - 30*mm, 30*mm)):
+        """Two-column key-value table."""
+        data = [[Paragraph(f"<b>{k}</b>", S_BODY), Paragraph(str(v), S_MONO)]
+                for k, v in rows]
+        t = Table(data, colWidths=[110*mm, 50*mm])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0),  COL_LGRAY),
+            ('ROWBACKGROUNDS', (0,0), (-1,-1), [COL_LGRAY, COL_WHITE]),
+            ('TEXTCOLOR',   (0,0), (-1,-1), COL_TEXT),
+            ('FONTSIZE',    (0,0), (-1,-1), 9),
+            ('GRID',        (0,0), (-1,-1), 0.4, colors.HexColor("#d0d0e0")),
+            ('LEFTPADDING', (0,0), (-1,-1), 8),
+            ('RIGHTPADDING',(0,0), (-1,-1), 8),
+            ('TOPPADDING',  (0,0), (-1,-1), 5),
+            ('BOTTOMPADDING',(0,0),(-1,-1), 5),
+            ('FONTNAME',    (0,0), (0,-1),  'Helvetica-Bold'),
+        ]))
+        return t
+
+    def header_table(title, bg=COL_ACCENT):
+        t = Table([[Paragraph(title, style('ht', fontSize=11, textColor=COL_WHITE,
+                   fontName='Helvetica-Bold', alignment=TA_LEFT))]],
+                  colWidths=[160*mm])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,-1), bg),
+            ('LEFTPADDING', (0,0), (-1,-1), 10),
+            ('TOPPADDING',  (0,0), (-1,-1), 7),
+            ('BOTTOMPADDING',(0,0),(-1,-1), 7),
+            ('ROUNDEDCORNERS', [4]),
+        ]))
+        return t
+
+    def score_table(label, value, unit="", col_hex="#667eea"):
+        t = Table([[
+            Paragraph(f"<b>{label}</b>", style('sl', fontSize=8, textColor=colors.HexColor("#888aaa"),
+                      fontName='Helvetica-Bold', alignment=TA_CENTER)),
+            Paragraph(f"<font color='{col_hex}'><b>{value}</b></font>",
+                      style('sv', fontSize=16, fontName='Helvetica-Bold', alignment=TA_CENTER)),
+            Paragraph(unit, style('su', fontSize=8, textColor=colors.HexColor("#888aaa"),
+                      alignment=TA_CENTER)),
+        ]], colWidths=[50*mm, 50*mm, 50*mm])
+        t.setStyle(TableStyle([
+            ('BOX',    (0,0), (-1,-1), 1, colors.HexColor("#d0d0ee")),
+            ('BACKGROUND', (0,0), (-1,-1), COL_LGRAY),
+            ('TOPPADDING',    (0,0), (-1,-1), 8),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 8),
+        ]))
+        return t
+
+    # ── Page template callbacks ──
+    def on_page(canvas, doc):
+        canvas.saveState()
+        # Header bar
+        canvas.setFillColor(COL_BG)
+        canvas.rect(0, page_h - 18*mm, page_w, 18*mm, fill=1, stroke=0)
+        canvas.setFillColor(COL_ACCENT)
+        canvas.setFont('Helvetica-Bold', 9)
+        canvas.drawString(15*mm, page_h - 11*mm, "MPBSI Framework — Optimization Report")
+        canvas.setFont('Helvetica', 8)
+        canvas.setFillColor(colors.HexColor("#a0a0c0"))
+        canvas.drawRightString(page_w - 15*mm, page_h - 11*mm,
+                               f"Grid-Independent Renewable Microgrid")
+        # Footer bar
+        canvas.setFillColor(colors.HexColor("#f0f0f8"))
+        canvas.rect(0, 0, page_w, 12*mm, fill=1, stroke=0)
+        canvas.setFillColor(COL_SUBTEXT)
+        canvas.setFont('Helvetica', 7.5)
+        canvas.drawString(15*mm, 4.5*mm,
+                          f"Generated: {datetime.now().strftime('%d %b %Y, %H:%M')}")
+        canvas.drawCentredString(page_w / 2, 4.5*mm,
+                                 f"Page {doc.page}")
+        canvas.drawRightString(page_w - 15*mm, 4.5*mm, "MPBSI Framework © 2024")
+        canvas.restoreState()
+
+    def on_first_page(canvas, doc):
+        # Cover: full dark background
+        canvas.setFillColor(COL_BG)
+        canvas.rect(0, 0, page_w, page_h, fill=1, stroke=0)
+        # Accent gradient bar at top
+        canvas.setFillColor(COL_ACCENT)
+        canvas.rect(0, page_h - 6*mm, page_w, 6*mm, fill=1, stroke=0)
+        # Footer
+        canvas.setFillColor(colors.HexColor("#0a0a20"))
+        canvas.rect(0, 0, page_w, 12*mm, fill=1, stroke=0)
+        canvas.setFillColor(colors.HexColor("#606080"))
+        canvas.setFont('Helvetica', 7.5)
+        canvas.drawCentredString(page_w/2, 4.5*mm,
+            f"Generated: {datetime.now().strftime('%d %b %Y, %H:%M')}  ·  Page 1")
+
+    # ── Build story ──
+    story = []
+
+    # ─────────────────────────────────────────────
+    # COVER PAGE
+    # ─────────────────────────────────────────────
+    story.append(Spacer(1, 40*mm))
+    story.append(Paragraph("MPBSI Framework", S_TITLE))
+    story.append(Spacer(1, 4*mm))
+    story.append(Paragraph("Grid-Independent Renewable Microgrid", S_SUBTITLE))
+    story.append(Paragraph("Optimization Report", S_SUBTITLE))
+    story.append(Spacer(1, 14*mm))
+
+    # Score highlight box
+    sc_txt_col = "#38ef7d" if mpbsi >= 0.8 else "#FFD700" if mpbsi >= 0.6 else "#ff6b6b"
+    score_box = Table([[
+        Paragraph("MPBSI SCORE",
+                  style('sbl', fontSize=9, textColor=colors.HexColor("#a0a0c0"),
+                        fontName='Helvetica-Bold', alignment=TA_CENTER, spaceBefore=0)),
+        Paragraph(f"<font color='{sc_txt_col}'><b>{mpbsi:.4f}</b></font>",
+                  style('sbv', fontSize=28, fontName='Helvetica-Bold', alignment=TA_CENTER)),
+        Paragraph(f"({'EXCELLENT' if mpbsi>=0.8 else 'GOOD' if mpbsi>=0.6 else 'NEEDS IMPROVEMENT'})",
+                  style('sbr', fontSize=9, textColor=colors.HexColor(sc_txt_col),
+                        alignment=TA_CENTER)),
+    ]], colWidths=[50*mm, 60*mm, 50*mm])
+    score_box.setStyle(TableStyle([
+        ('BOX',    (0,0), (-1,-1), 1.5, colors.HexColor("#333344")),
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor("#0f0f2e")),
+        ('TOPPADDING',    (0,0), (-1,-1), 12),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 12),
+        ('LEFTPADDING',   (0,0), (-1,-1), 10),
+        ('RIGHTPADDING',  (0,0), (-1,-1), 10),
+    ]))
+    story.append(score_box)
+    story.append(Spacer(1, 10*mm))
+
+    # Cover meta info
+    meta_rows = [
+        ("Algorithm",   algo),
+        ("Status",      "FEASIBLE SOLUTION FOUND" if feasible else "NO FEASIBLE SOLUTION"),
+        ("Runtime",     f"{runtime:.1f} seconds"),
+        ("Date",        datetime.now().strftime("%d %B %Y, %H:%M")),
+    ]
+    meta_t = Table([[Paragraph(f"<b>{k}</b>", style('mk', fontSize=10, textColor=colors.HexColor("#9090c0"),
+                               fontName='Helvetica-Bold', alignment=TA_RIGHT)),
+                     Paragraph(str(v), style('mv', fontSize=10, textColor=COL_WHITE,
+                               fontName='Helvetica', alignment=TA_LEFT))]
+                    for k, v in meta_rows],
+                   colWidths=[70*mm, 90*mm])
+    meta_t.setStyle(TableStyle([
+        ('LEFTPADDING',   (0,0), (-1,-1), 8),
+        ('RIGHTPADDING',  (0,0), (-1,-1), 8),
+        ('TOPPADDING',    (0,0), (-1,-1), 5),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 5),
+        ('LINEBELOW', (0,0), (-1,-2), 0.3, colors.HexColor("#223")),
+    ]))
+    story.append(meta_t)
+    story.append(PageBreak())
+
+    # ─────────────────────────────────────────────
+    # PAGE 2+: PERFORMANCE SUMMARY
+    # ─────────────────────────────────────────────
+    story.append(header_table("1. Performance Summary"))
+    story.append(Spacer(1, 4*mm))
+
+    perf_rows = [
+        ("MPBSI Score",          f"{mpbsi:.6f}  ({mpbsi*100:.2f}%)"),
+        ("Critical LPSP",        f"{rel.get('lpsp_critical',0)*100:.4f}%"),
+        ("RES Generation",       f"{rel.get('total_renewable_MWh',0):.1f} MWh/year"),
+        ("Annual Load Demand",   f"{rel.get('annual_load_MWh',0):.1f} MWh/year"),
+        ("Curtailed (Semi)",     f"{rel.get('curtailed_semi_MWh',0):.2f} MWh"),
+        ("Curtailed (Non)",      f"{rel.get('curtailed_non_MWh',0):.2f} MWh"),
+        ("Algorithm",            algo),
+        ("Runtime",              f"{runtime:.2f} s"),
+        ("Solution Feasible",    "Yes" if feasible else "No"),
+    ]
+    story.append(kv_table(perf_rows))
+    story.append(Spacer(1, 6*mm))
+
+    # ─────────────────────────────────────────────
+    # PILLAR SCORES
+    # ─────────────────────────────────────────────
+    story.append(header_table("2. MPBSI Pillar Scores", bg=COL_PURPLE))
+    story.append(Spacer(1, 4*mm))
+
+    PILLAR_WEIGHTS = {"TRI": 0.30, "EcSI": 0.25, "ORI": 0.15, "LSI": 0.15, "ESI": 0.15}
+    PILLAR_NAMES   = {"TRI": "Tactical Resilience Index", "ORI": "Operational Reliability Index",
+                      "LSI": "Logistics Support Index", "ESI": "Energy Security Index",
+                      "EcSI": "Economic Sustainability Index"}
+    if pillars:
+        pil_data = [["Pillar", "Full Name", "Weight", "Score", "Rating"]]
+        for k, v in pillars.items():
+            score = float(v) if isinstance(v, (int, float)) else 0.0
+            rating = "Excellent" if score >= 0.8 else "Good" if score >= 0.6 else "Needs Work"
+            pil_data.append([
+                k,
+                PILLAR_NAMES.get(k, k),
+                f"{PILLAR_WEIGHTS.get(k, 0)*100:.0f}%",
+                f"{score:.4f} ({score*100:.1f}%)",
+                rating,
+            ])
+        # weighted MPBSI check row
+        pil_data.append(["—", "Weighted MPBSI Total", "100%",
+                         f"{mpbsi:.4f} ({mpbsi*100:.2f}%)", ""])
+
+        pil_t = Table(pil_data, colWidths=[20*mm, 55*mm, 18*mm, 42*mm, 25*mm])
+        pil_t.setStyle(TableStyle([
+            ('BACKGROUND',   (0,0), (-1,0), COL_ACCENT),
+            ('TEXTCOLOR',    (0,0), (-1,0), COL_WHITE),
+            ('FONTNAME',     (0,0), (-1,0), 'Helvetica-Bold'),
+            ('FONTSIZE',     (0,0), (-1,-1), 8.5),
+            ('ROWBACKGROUNDS', (0,1), (-1,-1), [COL_LGRAY, COL_WHITE]),
+            ('GRID',         (0,0), (-1,-1), 0.4, colors.HexColor("#d0d0e0")),
+            ('LEFTPADDING',  (0,0), (-1,-1), 6),
+            ('RIGHTPADDING', (0,0), (-1,-1), 6),
+            ('TOPPADDING',   (0,0), (-1,-1), 5),
+            ('BOTTOMPADDING',(0,0), (-1,-1), 5),
+            ('BACKGROUND',   (0,-1), (-1,-1), colors.HexColor("#e8e8f8")),
+            ('FONTNAME',     (0,-1), (-1,-1), 'Helvetica-Bold'),
+        ]))
+        story.append(pil_t)
+    story.append(Spacer(1, 6*mm))
+
+    # ─────────────────────────────────────────────
+    # OPTIMAL CONFIGURATION
+    # ─────────────────────────────────────────────
+    story.append(header_table("3. Optimal System Configuration",
+                              bg=colors.HexColor("#2d7a3a")))
+    story.append(Spacer(1, 4*mm))
+
+    if best_x:
+        cfg_data = [["Component", "Optimal Value", "Unit"]]
+        units = ["kWp", "kW", "kWh", "kW", "kWh", "kW"]
+        for i, val in enumerate(best_x):
+            name = var_names[i] if i < len(var_names) else f"Var {i}"
+            unit = units[i] if i < len(units) else ""
+            cfg_data.append([name, f"{float(val):,.1f}", unit])
+
+        cfg_t = Table(cfg_data, colWidths=[80*mm, 50*mm, 30*mm])
+        cfg_t.setStyle(TableStyle([
+            ('BACKGROUND',   (0,0), (-1,0), colors.HexColor("#2d7a3a")),
+            ('TEXTCOLOR',    (0,0), (-1,0), COL_WHITE),
+            ('FONTNAME',     (0,0), (-1,0), 'Helvetica-Bold'),
+            ('FONTSIZE',     (0,0), (-1,-1), 9),
+            ('ROWBACKGROUNDS', (0,1), (-1,-1), [COL_LGRAY, COL_WHITE]),
+            ('GRID',         (0,0), (-1,-1), 0.4, colors.HexColor("#d0d0e0")),
+            ('LEFTPADDING',  (0,0), (-1,-1), 8),
+            ('RIGHTPADDING', (0,0), (-1,-1), 8),
+            ('TOPPADDING',   (0,0), (-1,-1), 6),
+            ('BOTTOMPADDING',(0,0), (-1,-1), 6),
+            ('ALIGN',        (1,0), (2,-1), 'RIGHT'),
+        ]))
+        story.append(cfg_t)
+    story.append(Spacer(1, 6*mm))
+
+    # ─────────────────────────────────────────────
+    # CAPEX & NPC ANALYSIS
+    # ─────────────────────────────────────────────
+    story.append(header_table("4. CAPEX & Net Present Cost (NPC) Analysis",
+                              bg=colors.HexColor("#8a6000")))
+    story.append(Spacer(1, 4*mm))
+
+    # Default cost parameters (matching the HTML defaults)
+    costs = {
+        "PV":      55_000,   # ₹/kWp
+        "Wind":   120_000,   # ₹/kW
+        "Battery": 22_000,   # ₹/kWh
+        "Electrolyzer": 70_000,  # ₹/kW
+        "H2":      80_000,   # ₹/kWh
+        "FC":     110_000,   # ₹/kW
+    }
+    r, n, om_rate = 0.08, 20, 0.02
+    bat_yr, fc_yr, el_yr = 10, 10, 15
+
+    if best_x and len(best_x) >= 6:
+        pv_kw, wt_kw, bat_kwh, el_kw, h2_kwh, fc_kw = [float(v) for v in best_x[:6]]
+        Cost_PV  = costs["PV"]      * pv_kw
+        Cost_WT  = costs["Wind"]    * wt_kw
+        Cost_Bat = costs["Battery"] * bat_kwh
+        Cost_EL  = costs["Electrolyzer"] * el_kw
+        Cost_H2  = costs["H2"]      * h2_kwh
+        Cost_FC  = costs["FC"]      * fc_kw
+        CAPEX    = Cost_PV + Cost_WT + Cost_Bat + Cost_EL + Cost_H2 + Cost_FC
+
+        Bat_repl = Cost_Bat / (1 + r) ** bat_yr
+        FC_repl  = Cost_FC  / (1 + r) ** fc_yr
+        EL_repl  = Cost_EL  / (1 + r) ** el_yr
+        OM_ann   = om_rate * CAPEX
+        annuity  = (1 - (1 + r) ** (-n)) / r
+        OM_PV    = OM_ann * annuity
+        NPC      = CAPEX + Bat_repl + FC_repl + EL_repl + OM_PV
+
+        ann_load_kwh = rel.get("annual_load_MWh", 0) * 1000
+        LCOE = NPC / (ann_load_kwh * n) if ann_load_kwh > 0 else 0
+
+        def cr(v): return f"Rs.{v/1e7:.3f} Cr  (Rs.{v:,.0f})"
+        def pct(v): return f"{v/CAPEX*100:.1f}%" if CAPEX > 0 else "—"
+
+        capex_data = [
+            ["Component", "Capital Cost", "Share of CAPEX"],
+            ["PV Array",           cr(Cost_PV),  pct(Cost_PV)],
+            ["Wind Turbines",      cr(Cost_WT),  pct(Cost_WT)],
+            ["Battery Bank",       cr(Cost_Bat), pct(Cost_Bat)],
+            ["Electrolyzer",       cr(Cost_EL),  pct(Cost_EL)],
+            ["H2 Storage",         cr(Cost_H2),  pct(Cost_H2)],
+            ["Fuel Cell",          cr(Cost_FC),  pct(Cost_FC)],
+            ["TOTAL CAPEX",        cr(CAPEX),    "100%"],
+        ]
+        capex_t = Table(capex_data, colWidths=[55*mm, 70*mm, 35*mm])
+        capex_t.setStyle(TableStyle([
+            ('BACKGROUND',   (0,0), (-1,0), colors.HexColor("#8a6000")),
+            ('TEXTCOLOR',    (0,0), (-1,0), COL_WHITE),
+            ('FONTNAME',     (0,0), (-1,0), 'Helvetica-Bold'),
+            ('FONTSIZE',     (0,0), (-1,-1), 8.5),
+            ('ROWBACKGROUNDS', (0,1), (-1,-2), [COL_LGRAY, COL_WHITE]),
+            ('GRID',         (0,0), (-1,-1), 0.4, colors.HexColor("#d0d0e0")),
+            ('LEFTPADDING',  (0,0), (-1,-1), 6),
+            ('RIGHTPADDING', (0,0), (-1,-1), 6),
+            ('TOPPADDING',   (0,0), (-1,-1), 5),
+            ('BOTTOMPADDING',(0,0), (-1,-1), 5),
+            ('ALIGN',        (1,0), (-1,-1), 'RIGHT'),
+            ('BACKGROUND',   (0,-1), (-1,-1), colors.HexColor("#e8d8a0")),
+            ('FONTNAME',     (0,-1), (-1,-1), 'Helvetica-Bold'),
+        ]))
+        story.append(capex_t)
+        story.append(Spacer(1, 4*mm))
+
+        npc_data = [
+            ["NPC Cost Component",               "Value (Discounted)"],
+            ["Initial CAPEX",                    cr(CAPEX)],
+            [f"Battery Replacement (yr {bat_yr})", cr(Bat_repl)],
+            [f"Fuel Cell Replacement (yr {fc_yr})", cr(FC_repl)],
+            [f"Electrolyzer Replacement (yr {el_yr})", cr(EL_repl)],
+            [f"O&M PV ({n} yrs @ {r*100:.0f}% discount)", cr(OM_PV)],
+            ["TOTAL NPC",                         cr(NPC)],
+        ]
+        npc_t = Table(npc_data, colWidths=[90*mm, 70*mm])
+        npc_t.setStyle(TableStyle([
+            ('BACKGROUND',   (0,0), (-1,0), colors.HexColor("#6a4800")),
+            ('TEXTCOLOR',    (0,0), (-1,0), COL_WHITE),
+            ('FONTNAME',     (0,0), (-1,0), 'Helvetica-Bold'),
+            ('FONTSIZE',     (0,0), (-1,-1), 8.5),
+            ('ROWBACKGROUNDS', (0,1), (-1,-2), [COL_LGRAY, COL_WHITE]),
+            ('GRID',         (0,0), (-1,-1), 0.4, colors.HexColor("#d0d0e0")),
+            ('LEFTPADDING',  (0,0), (-1,-1), 8),
+            ('RIGHTPADDING', (0,0), (-1,-1), 8),
+            ('TOPPADDING',   (0,0), (-1,-1), 5),
+            ('BOTTOMPADDING',(0,0), (-1,-1), 5),
+            ('ALIGN',        (1,0), (1,-1), 'RIGHT'),
+            ('BACKGROUND',   (0,-1), (-1,-1), colors.HexColor("#e8d8a0")),
+            ('FONTNAME',     (0,-1), (-1,-1), 'Helvetica-Bold'),
+        ]))
+        story.append(npc_t)
+        story.append(Spacer(1, 4*mm))
+
+        # Financial KPI row
+        kpi_data = [[
+            Paragraph(f"<b>CAPEX</b><br/><font color='#3333aa' size='14'>{CAPEX/1e7:.2f} Cr</font>",
+                      style('kv', fontSize=9, alignment=TA_CENTER)),
+            Paragraph(f"<b>NPC</b><br/><font color='#aa6600' size='14'>{NPC/1e7:.2f} Cr</font>",
+                      style('kv', fontSize=9, alignment=TA_CENTER)),
+            Paragraph(f"<b>LCOE</b><br/><font color='#006633' size='14'>Rs.{LCOE:.2f}/kWh</font>",
+                      style('kv', fontSize=9, alignment=TA_CENTER)),
+            Paragraph(f"<b>O&amp;M/yr</b><br/><font color='#880000' size='14'>{OM_ann/1e7:.3f} Cr</font>",
+                      style('kv', fontSize=9, alignment=TA_CENTER)),
+        ]]
+        kpi_t = Table(kpi_data, colWidths=[40*mm]*4)
+        kpi_t.setStyle(TableStyle([
+            ('BOX',   (0,0), (-1,-1), 1, colors.HexColor("#c0c0e0")),
+            ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor("#d0d0ee")),
+            ('ROWBACKGROUNDS', (0,0), (-1,-1), [COL_LGRAY]),
+            ('TOPPADDING',    (0,0), (-1,-1), 10),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 10),
+        ]))
+        story.append(kpi_t)
+        story.append(Spacer(1, 4*mm))
+
+        # Financial parameters note
+        fp_para = Paragraph(
+            f"<i>Financial parameters used: Discount rate {r*100:.0f}% | Project lifetime {n} years | "
+            f"O&amp;M {om_rate*100:.0f}% of CAPEX/yr | Battery replacement yr {bat_yr} | "
+            f"FC replacement yr {fc_yr} | EL replacement yr {el_yr}</i>",
+            S_SMALL)
+        story.append(fp_para)
+
+    story.append(Spacer(1, 6*mm))
+
+    # ─────────────────────────────────────────────
+    # AUTONOMY ANALYSIS
+    # ─────────────────────────────────────────────
+    story.append(header_table("5. Autonomy & Storage Analysis",
+                              bg=colors.HexColor("#1a5c3a")))
+    story.append(Spacer(1, 4*mm))
+
+    step9 = steps.get("step9_survivability_sizing", {})
+    ann_load = rel.get("annual_load_MWh", 0)
+    batt_kwh = float(best_x[2]) if best_x and len(best_x) > 2 else 0
+    h2_kwh_val = float(best_x[4]) if best_x and len(best_x) > 4 else 0
+    crit_daily = step9.get("critical_daily_energy_kWh") or (ann_load * 1000 / 365 * 0.6 if ann_load else 0)
+    total_storage = batt_kwh + h2_kwh_val
+    autonomy = total_storage / crit_daily if crit_daily > 0 else 0
+
+    # MATLAB autonomy formula: (usable_battery + usable_h2_elec) / critical_daily
+    # usable_battery = 0.6 × BESS_cap (SOC goes from 0.2 to 0.8)... wait:
+    # MATLAB: usable_battery = SOC_max - SOC_min = E_BESS - 0.2×E_BESS = 0.8... no:
+    # Actually SOC_max=E_BESS, SOC_min=0.2×E_BESS → usable=0.8×E_BESS? No:
+    # SOC starts at 0.8×E_BESS. Range = SOC_max - SOC_min = E_BESS - 0.2×E_BESS = 0.8×E_BESS
+    # But MATLAB sets usable_battery = SOC_max - SOC_min regardless of current state
+    # usable_h2_elec = E_H2_max × eta_FC
+    eta_dis_aut = 0.95
+    eta_FC_aut  = 0.55
+    usable_batt  = 0.8 * batt_kwh    # (SOC_max - SOC_min) = E_BESS - 0.2×E_BESS
+    usable_h2    = h2_kwh_val * eta_FC_aut
+    eff_autonomy = (usable_batt + usable_h2) / crit_daily if crit_daily else 0
+    # Use actual autonomy from simulation if available
+    sim_auto = rel.get("autonomy_days", eff_autonomy)
+    auto_rows = [
+        ("Battery Capacity",         f"{batt_kwh:,.0f} kWh"),
+        ("Usable Battery (×0.8)",    f"{usable_batt:,.0f} kWh → {usable_batt/crit_daily:.2f} days" if crit_daily else "—"),
+        ("H₂ Tank Capacity",         f"{h2_kwh_val:,.0f} kWh chemical"),
+        ("Usable H₂ (×η_FC=0.55)",   f"{usable_h2:,.0f} kWh → {usable_h2/crit_daily:.2f} days" if crit_daily else "—"),
+        ("Critical Daily Load (60%)", f"{crit_daily:,.0f} kWh/day"),
+        ("Effective Autonomy",        f"{sim_auto:.2f} days  (MATLAB formula)"),
+        ("Mission Requirement",       "≥ 7 days (MATLAB: Required_Autonomy=7)"),
+        ("Autonomy Status",           "[MET]" if sim_auto >= 7 else "[NOT MET — infeasible]"),
+    ]
+    story.append(kv_table(auto_rows))
+    story.append(Spacer(1, 6*mm))
+
+    # ─────────────────────────────────────────────
+    # STEP ANALYSIS (if available)
+    # ─────────────────────────────────────────────
+    step_keys = {
+        "step5_battery":     ("Step 5 — Battery LPSP",        "LPSP_critical",             100, "%"),
+        "step7_h2":          ("Step 7 — H2 Raw Deficit",       "raw_critical_deficit_MWh",  1,   "MWh"),
+        "step8_deficit":     ("Step 8 — Max Deficit Window",   "max_consecutive_days",      1,   "days"),
+        "step9_survivability":("Step 9 — H2 Baseline (2d)",   "H2_baseline_chemical_kWh",  0.001, "MWh"),
+        "step6_seasonal":    ("Step 6 — Seasonal Storage Req", "required_storage_MWh",      1,   "MWh"),
+    }
+    step_rows = []
+    for key, (label, field, mult, unit) in step_keys.items():
+        val = steps.get(key, {}).get(field)
+        if val is not None:
+            try:
+                step_rows.append((label, f"{float(val)*mult:.3f} {unit}"))
+            except Exception:
+                step_rows.append((label, str(val)))
+
+    if step_rows:
+        story.append(header_table("6. Step-by-Step Analysis",
+                                  bg=colors.HexColor("#1a3a5c")))
+        story.append(Spacer(1, 4*mm))
+        story.append(kv_table(step_rows))
+
+    # ─────────────────────────────────────────────
+    # BUILD PDF
+    # ─────────────────────────────────────────────
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4,
+        leftMargin=15*mm, rightMargin=15*mm,
+        topMargin=22*mm, bottomMargin=16*mm,
+        title="MPBSI Optimization Report",
+        author="MPBSI Framework",
+        subject="Grid-Independent Renewable Microgrid Optimization",
+    )
+    doc.build(story, onFirstPage=on_first_page, onLaterPages=on_page)
+    return buf.getvalue()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  RUN PIPELINE
+# ══════════════════════════════════════════════════════════════════════════════
+if run_btn:
+    # Inject a full-page loader overlay directly into the Streamlit DOM
+    # This covers the entire browser window immediately on click
+    st.markdown(f"""
+<style>
+#mpbsi-loader-overlay {{
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    left: 21rem;
+    z-index: 999999;
+    background: rgba(6, 10, 20, 0.96);
+    backdrop-filter: blur(10px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+}}
+.mpbsi-loader-spinner {{
+    width: 72px; height: 72px;
+    border: 5px solid rgba(102,126,234,0.15);
+    border-top: 5px solid #667eea;
+    border-right: 5px solid #a78bfa;
+    border-radius: 50%;
+    animation: mpbsi-spin 0.9s linear infinite;
+    margin-bottom: 22px;
+}}
+@keyframes mpbsi-spin {{
+    0% {{ transform: rotate(0deg); }}
+    100% {{ transform: rotate(360deg); }}
+}}
+.mpbsi-loader-title {{
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1.4em;
+    font-weight: 700;
+    color: #e0e6ff;
+    margin-bottom: 6px;
+    letter-spacing: 0.5px;
+}}
+.mpbsi-loader-sub {{
+    font-size: 0.85em;
+    color: #8b9dc3;
+    margin-bottom: 28px;
+    letter-spacing: 0.3px;
+}}
+.mpbsi-loader-badge {{
+    background: linear-gradient(135deg, rgba(102,126,234,0.25), rgba(118,75,162,0.25));
+    border: 1px solid rgba(102,126,234,0.5);
+    border-radius: 24px;
+    padding: 5px 18px;
+    font-size: 0.78em;
+    font-weight: 700;
+    color: #a78bfa;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+}}
+.mpbsi-steps {{
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 380px;
+    margin-bottom: 28px;
+}}
+.mpbsi-step {{
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    border-radius: 10px;
+    background: rgba(102,126,234,0.06);
+    border: 1px solid rgba(102,126,234,0.12);
+    font-size: 0.88em;
+    color: rgba(160,168,212,0.4);
+    transition: all 0.4s ease;
+}}
+.mpbsi-step.active {{
+    background: rgba(102,126,234,0.15);
+    border-color: rgba(102,126,234,0.45);
+    color: #c8d0e8;
+}}
+.mpbsi-step.done {{
+    background: rgba(56,239,125,0.08);
+    border-color: rgba(56,239,125,0.3);
+    color: rgba(160,212,180,0.7);
+}}
+.mpbsi-step-icon {{
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.85em;
+    flex-shrink: 0;
+    background: rgba(102,126,234,0.15);
+    color: rgba(160,168,212,0.3);
+    transition: all 0.4s ease;
+}}
+.mpbsi-step.active .mpbsi-step-icon {{
+    background: rgba(102,126,234,0.3);
+    color: #a78bfa;
+    animation: mpbsi-pulse 1.2s ease-in-out infinite;
+}}
+.mpbsi-step.done .mpbsi-step-icon {{
+    background: rgba(56,239,125,0.2);
+    color: #38ef7d;
+}}
+@keyframes mpbsi-pulse {{
+    0%, 100% {{ box-shadow: 0 0 0 0 rgba(102,126,234,0.4); }}
+    50%        {{ box-shadow: 0 0 0 6px rgba(102,126,234,0); }}
+}}
+.mpbsi-loader-dots {{
+    display: flex;
+    gap: 8px;
+}}
+.mpbsi-loader-dot {{
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #667eea;
+    animation: mpbsi-dot-bounce 0.9s ease-in-out infinite;
+}}
+.mpbsi-loader-dot:nth-child(2) {{ animation-delay: 0.2s; }}
+.mpbsi-loader-dot:nth-child(3) {{ animation-delay: 0.4s; }}
+@keyframes mpbsi-dot-bounce {{
+    0%, 80%, 100% {{ transform: scale(0.6); opacity: 0.4; }}
+    40%            {{ transform: scale(1.2); opacity: 1; }}
+}}
+</style>
+<div id="mpbsi-loader-overlay">
+    <div class="mpbsi-loader-badge">{algo} Optimization</div>
+    <div class="mpbsi-loader-spinner"></div>
+    <div class="mpbsi-loader-title">🚀 Launching {algo} Pipeline...</div>
+    <div class="mpbsi-loader-sub">Processing — this may take a minute</div>
+    <div class="mpbsi-steps">
+        <div class="mpbsi-step active" id="lstep0">
+            <div class="mpbsi-step-icon">⚙️</div>
+            <span>Initialising optimizer &amp; loading dataset</span>
+        </div>
+        <div class="mpbsi-step" id="lstep1">
+            <div class="mpbsi-step-icon">☀️</div>
+            <span>Computing solar &amp; wind generation profiles</span>
+        </div>
+        <div class="mpbsi-step" id="lstep2">
+            <div class="mpbsi-step-icon">🔋</div>
+            <span>Running battery dispatch simulation (Step 5)</span>
+        </div>
+        <div class="mpbsi-step" id="lstep3">
+            <div class="mpbsi-step-icon">⚗️</div>
+            <span>Evaluating H₂ storage &amp; fuel cell (Steps 7–9)</span>
+        </div>
+        <div class="mpbsi-step" id="lstep4">
+            <div class="mpbsi-step-icon">🧬</div>
+            <span>Running {algo} swarm iterations</span>
+        </div>
+        <div class="mpbsi-step" id="lstep5">
+            <div class="mpbsi-step-icon">📊</div>
+            <span>Scoring MPBSI pillars &amp; compiling results</span>
+        </div>
+    </div>
+    <div class="mpbsi-loader-dots">
+        <div class="mpbsi-loader-dot"></div>
+        <div class="mpbsi-loader-dot"></div>
+        <div class="mpbsi-loader-dot"></div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+    # Separate components.html so JS actually executes and can reach parent DOM
+    st.components.v1.html(f"""
+<script>
+(function() {{
+    var delays = [0, 2500, 6000, 10000, 14000, 22000];
+    function activate(i) {{
+        try {{
+            var doc = window.parent.document;
+            if (i > 0) {{
+                var prev = doc.getElementById('lstep' + (i - 1));
+                if (prev) {{
+                    prev.className = 'mpbsi-step done';
+                    var ic = prev.querySelector('.mpbsi-step-icon');
+                    if (ic) ic.textContent = '\\u2713';
+                }}
+            }}
+            var cur = doc.getElementById('lstep' + i);
+            if (cur) cur.className = 'mpbsi-step active';
+        }} catch(e) {{}}
+    }}
+    delays.forEach(function(d, i) {{
+        setTimeout(function() {{ activate(i); }}, d);
+    }});
+}})();
+</script>
+""", height=0)
+
+    config = {
+        "seed":           int(seed),
+        "land_available": float(land_m2),
+        "pso_n_pop":      int(n_pop)  if algo == "PSO"     else 30,
+        "pso_max_it":     int(max_it) if algo == "PSO"     else 40,
+        "pso_w":          float(pso_w),
+        "pso_wdamp":      float(pso_wdamp),
+        "pso_c1":         float(pso_c1),
+        "pso_c2":         float(pso_c2),
+        "nsga2_n_pop":    int(n_pop)  if algo == "NSGA-II" else 80,
+        "nsga2_max_gen":  int(max_it) if algo == "NSGA-II" else 60,
+        # Bounds only sent if user changed from defaults (PSO auto-derives from land_available)
+        "bounds": {
+            "pv_min":   float(pv_min),  "pv_max":   float(pv_max),
+            "wind_min": float(wn_min),  "wind_max": float(wn_max),
+            "batt_min": float(bt_min),  "batt_max": float(bt_max),
+            "elec_min": float(el_min),  "elec_max": float(el_max),
+            "h2_min":   float(h2_min),  "h2_max":   float(h2_max),
+            "fc_min":   float(fc_min),  "fc_max":   float(fc_max),
+        },
+    }
+
+    dataset_path = None
+    if uploaded_file is not None:
+        import os, tempfile
+        suffix = Path(uploaded_file.name).suffix
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+        tmp.write(uploaded_file.getvalue())
+        tmp.close()
+        dataset_path = tmp.name
+    else:
+        st.error("❌ No dataset uploaded. Please upload a file before running.")
+        st.stop()
+
+    # ── Live progress UI elements ──────────────────────────────────────────────
+    st.markdown(f"""
+<div style="background:rgba(102,126,234,0.08);border:1px solid rgba(102,126,234,0.2);
+            border-radius:12px;padding:18px 24px;margin:12px 0;">
+  <div style="font-family:'JetBrains Mono',monospace;font-size:0.75em;font-weight:700;
+              letter-spacing:2px;text-transform:uppercase;color:rgba(167,139,250,0.8);
+              margin-bottom:12px;">⚡ {algo} PIPELINE RUNNING</div>
+  <div style="color:#c8d0e8;font-size:0.9em;">
+      Steps 1–10 running… then {algo} optimization will start.
+      Live iteration progress shown below.
+  </div>
+</div>""", unsafe_allow_html=True)
+
+    prog_bar     = st.progress(0, text="⏳ Initialising pipeline…")
+    iter_status  = st.empty()      # live iteration counter
+    best_status  = st.empty()      # live best MPBSI
+    pso_max_it   = config.get("pso_max_it", 80) if algo == "PSO" else config.get("nsga2_max_gen", 50)
+
+    def _progress_cb(it, max_it, best_mpbsi, feasible_count, phase=None):
+        """Called by backend after every PSO iteration (and during init)."""
+        if phase:
+            # Initialisation phase — show particle init progress
+            prog_bar.progress(3, text=f"🔍 Initialising swarm… {phase}")
+            iter_status.markdown(
+                f"<div style='font-family:monospace;font-size:0.88em;color:#a0a8d4;'>"
+                f"⚙️ Evaluating initial particles: <b style='color:#c8d0e8'>{phase}</b></div>",
+                unsafe_allow_html=True
+            )
+            return
+        pct = max(5, int(it / max_it * 100))
+        feasible_txt = f" │ ✅ {feasible_count} feasible found" if feasible_count > 0 else " │ ⚠️ still searching…"
+        prog_bar.progress(pct, text=f"🔄 {algo} Iteration {it}/{max_it}  ({pct}%){feasible_txt}")
+        color = "#38ef7d" if best_mpbsi > -1e5 else "#ff9f43"
+        w_cur = 0.8 * (0.98 ** it)
+        iter_status.markdown(
+            f"<div style='font-family:monospace;font-size:0.88em;color:#a0a8d4;margin-top:6px;'>"
+            f"Iteration <b style='color:#c8d0e8;font-size:1.1em'>{it}</b> / {max_it}"
+            f" &nbsp;│&nbsp; w = {w_cur:.4f}"
+            f" &nbsp;│&nbsp; Stagnation: {max(0, it - feasible_count)}</div>",
+            unsafe_allow_html=True
+        )
+        best_status.markdown(
+            f"<div style='font-family:monospace;font-size:1.05em;margin-top:4px;'>"
+            f"Best MPBSI: <b style='color:{color};font-size:1.4em;'>"
+            f"{'%.4f' % best_mpbsi if best_mpbsi > -1e5 else '—'}</b>"
+            f"<span style='color:#8b9dc3;font-size:0.85em;'>"
+            f"{'  ✅ Feasible solution found!' if best_mpbsi > -1e5 else '  ⏳ No feasible solution yet'}"
+            f"</span></div>",
+            unsafe_allow_html=True
+        )
+
+    # Update progress bar for the pipeline steps (before PSO starts)
+    prog_bar.progress(5, text="📂 Step 1: Loading dataset…")
+
+    try:
+        results = run_pipeline(
+            algo=algo,
+            dataset=dataset_path,
+            config=config,
+            progress_callback=_progress_cb,
+            mode=mode_key,
+        )
+    except Exception as exc:
+        st.error(f"❌ Pipeline error: {exc}")
+        with st.expander("Full traceback"):
+            st.code(traceback.format_exc())
+        if dataset_path:
+            try:
+                import os; os.unlink(dataset_path)
+            except Exception:
+                pass
+        st.stop()
+
+    prog_bar.progress(100, text="✅ Optimization complete!")
+    iter_status.empty()
+    best_status.empty()
+
+    if dataset_path:
+        try:
+            import os; os.unlink(dataset_path)
+        except Exception:
+            pass
+
+    st.session_state.mpbsi_results = results
+    st.session_state.mpbsi_ts      = int(time.time())
+    st.rerun()

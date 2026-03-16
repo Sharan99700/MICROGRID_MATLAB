@@ -1,0 +1,1680 @@
+"""
+MPBSI Framework — Complete Python Backend
+==========================================
+Mirrors the MATLAB workflow exactly, step by step.
+Designed to integrate with the existing HTML/Streamlit UI.
+
+Author  : Translated from MATLAB reference implementation
+Version : 3.0 (Production-Quality)
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import time
+import warnings
+from dataclasses import dataclass, field, asdict
+from pathlib import Path
+import re
+from typing import Any, Optional
+
+import numpy as np
+import pandas as pd
+
+# Optional scipy for NSGA-II — gracefully degraded if unavailable
+try:
+    from scipy.spatial.distance import cdist
+    SCIPY_OK = True
+except ImportError:
+    SCIPY_OK = False
+
+warnings.filterwarnings("ignore", category=RuntimeWarning)
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  DATA CONTAINERS
+# ══════════════════════════════════════════════════════════════════════════════
+
+@dataclass
+class BaseData:
+    """Structured container mirroring BaseData_Akhnoor.mat"""
+    time: np.ndarray       # Timestamps (N,)
+    ghi: np.ndarray        # W/m² or Wh/m²
+    wind_speed: np.ndarray # m/s
+    temperature: np.ndarray
+    load: np.ndarray       # kW
+    N: int                 # Total hours
+
+    def to_dict(self) -> dict:
+        return {
+            "N": self.N,
+            "avg_load_kW": float(np.mean(self.load)),
+            "peak_load_kW": float(np.max(self.load)),
+            "avg_ghi": float(np.mean(self.ghi)),
+            "avg_wind_mps": float(np.mean(self.wind_speed)),
+        }
+
+
+@dataclass
+class SolarData:
+    p_solar: np.ndarray          # kW
+    annual_solar_MWh: float
+
+
+@dataclass
+class WindData:
+    p_wind: np.ndarray           # kW
+    annual_wind_MWh: float
+
+
+@dataclass
+class HybridData:
+    p_gen: np.ndarray            # kW  (solar + wind)
+    annual_hybrid_MWh: float
+
+
+@dataclass
+class BatteryDispatchResult:
+    """Step 4 — Priority battery dispatch"""
+    lpsp_critical: float
+    curtailed_semi_MWh: float
+    curtailed_non_MWh: float
+    battery_cap_kWh: float
+    unmet_critical_kWh: float
+
+
+@dataclass
+class SeasonalAnalysis:
+    """Step 5 — Seasonal energy imbalance"""
+    required_storage_MWh: float
+    cumulative_energy: np.ndarray   # shifted cumsum (kWh)
+
+
+@dataclass
+class H2DispatchResult:
+    """Steps 6/9/10 — Battery + hydrogen dispatch"""
+    lpsp_critical: float
+    curtailed_semi_MWh: float
+    curtailed_non_MWh: float
+    battery_cap_kWh: float
+    h2_cap_kWh: float
+    raw_critical_deficit_MWh: float
+
+
+@dataclass
+class DeficitWindowResult:
+    """Step 7 — Deficit window analysis"""
+    max_consecutive_hours: int
+    max_consecutive_days: float
+    max_consecutive_energy_MWh: float
+
+
+@dataclass
+class Survivabilitysizing:
+    """Step 8 — Survivability-based H2 sizing"""
+    critical_daily_energy_kWh: float
+    h2_baseline_kWh: float   # 15-day
+    h2_stress_kWh: float     # 30-day
+
+
+@dataclass
+class SimulationResult:
+    """Full 8760-hour dispatch result (Step 10 / microgrid_priority_dispatch_full_v2)"""
+    is_feasible: bool
+    lpsp_critical: float
+    curtailed_semi_MWh: float
+    curtailed_non_MWh: float
+    total_renewable_MWh: float
+    annual_load_MWh: float
+
+    # Arrays stored for post-analysis (optional)
+    soc_series: Optional[np.ndarray] = None
+    h2_series:  Optional[np.ndarray] = None
+
+
+@dataclass
+class Pillars:
+    ESI: float
+    EcSI: float
+    TRI: float
+    ORI: float
+    LSI: float
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass
+class MPBSIResult:
+    mpbsi: float
+    pillars: Pillars
+    is_feasible: bool
+    simulation: SimulationResult
+
+    def to_dict(self) -> dict:
+        return {
+            "mpbsi": self.mpbsi,
+            "pillars": self.pillars.to_dict(),
+            "is_feasible": self.is_feasible,
+            "lpsp_critical": self.simulation.lpsp_critical,
+            "total_renewable_MWh": self.simulation.total_renewable_MWh,
+            "annual_load_MWh": self.simulation.annual_load_MWh,
+        }
+
+
+@dataclass
+class OptimizationResult:
+    algorithm: str                         # "PSO" or "NSGA-II"
+    best_x: list                           # [PV, Wind, Bat, EL, H2, FC]
+    best_mpbsi: float
+    best_pillars: dict
+    convergence: list                      # best MPBSI per iteration
+    runtime_seconds: float
+    feasible: bool
+    reliability_metrics: dict
+    variable_names: list = field(default_factory=lambda: [
+        "PV_kWp", "Wind_kW", "Battery_kWh",
+        "Electrolyzer_kW", "H2_kWh", "FuelCell_kW"
+    ])
+
+    def to_json(self) -> str:
+        return json.dumps({
+            "algorithm": self.algorithm,
+            "best_x": self.best_x,
+            "best_mpbsi": self.best_mpbsi,
+            "best_pillars": self.best_pillars,
+            "convergence": self.convergence,
+            "runtime_seconds": self.runtime_seconds,
+            "feasible": self.feasible,
+            "reliability_metrics": self.reliability_metrics,
+            "variable_names": self.variable_names,
+        }, indent=2)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  STEP 1  —  LOAD DATASET
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _fuzzy_find_column(df_columns: list, *candidates: str) -> Optional[str]:
+    """
+    Robustly find a column by trying multiple candidate names,
+    case-insensitive, ignoring spaces/underscores/special chars.
+    Returns the first match found in df_columns, or None.
+    """
+    def normalise(s: str) -> str:
+        return re.sub(r"[^a-z0-9]", "", s.lower())
+
+    norm_cols = {normalise(c): c for c in df_columns}
+
+    for cand in candidates:
+        # 1. Exact match
+        if cand in df_columns:
+            return cand
+        # 2. Case-insensitive exact
+        for c in df_columns:
+            if c.lower() == cand.lower():
+                return c
+        # 3. Normalised match
+        nc = normalise(cand)
+        if nc in norm_cols:
+            return norm_cols[nc]
+        # 4. Substring match (normalised)
+        for nk, orig in norm_cols.items():
+            if nc in nk or nk in nc:
+                return orig
+
+    return None
+
+
+def _detect_ghi_unit(col_data: np.ndarray, col_name: str) -> float:
+    """
+    Detect whether a solar column is in Wh/m² or kWh/m² (or kW/m²)
+    and return the multiplier needed to convert to Wh/m².
+    
+    Rules:
+    - If max value > 10  → already in Wh/m²  → multiply by 1.0
+    - If max value <= 10 → in kWh/m² or kW/m² → multiply by 1000.0
+    """
+    peak = float(np.nanmax(col_data))
+    if peak <= 10.0:
+        logger.info("Step 1 — Solar column '%s' detected as kW/m² or kWh/m² (peak=%.3f) → converting ×1000 to Wh/m²",
+                    col_name, peak)
+        return 1000.0
+    else:
+        logger.info("Step 1 — Solar column '%s' detected as Wh/m² (peak=%.1f) → no conversion needed",
+                    col_name, peak)
+        return 1.0
+
+
+def step1_load_data(
+    filepath: str | Path,
+    col_time: str = "Timestamp",
+    col_ghi:  str = "GHI_Wh_m2",
+    col_wind: str = "WindSpeed_10m_mps",
+    col_temp: str = "Temperature_C",
+    col_load: str = "Load_kW",
+) -> BaseData:
+    """
+    Replicates Step1_Load_Akhnoor.m exactly.
+    Loads hourly dataset from Excel or CSV.
+    Expected columns (flexible naming):
+        Time / Timestamp / Date
+        GHI / GHI_Wh_m2 / GHI_W_per_m2 / Solar / Irradiance
+        WindSpeed / Wind_Speed / WindSpeed_10m_mps / Wind
+        Temperature / Temperature_C / Temp
+        Load / Load_kW / Demand / Power
+    """
+    path = Path(filepath)
+    ext  = path.suffix.lower()
+
+    if ext in (".xlsx", ".xls"):
+        df = pd.read_excel(path)
+    elif ext == ".csv":
+        df = pd.read_csv(path)
+    else:
+        raise ValueError(f"Unsupported file format: {ext}. Use .xlsx, .xls, or .csv")
+
+    cols = list(df.columns)
+    logger.info("Step 1 — File columns detected: %s", cols)
+
+    # ── Fuzzy column detection — tries many common naming conventions ──
+    found_time = _fuzzy_find_column(cols,
+        col_time, "Timestamp", "Time", "DateTime", "Date", "Hour", "Datetime")
+
+    found_ghi  = _fuzzy_find_column(cols,
+        col_ghi, "GHI_Wh_m2", "GHI_W_per_m2", "GHI", "ghi",
+        "solar_kWm2", "solar_kwm2", "Solar_kWm2", "solar_kW_m2",
+        "Solar_Irradiance", "Irradiance", "SolarIrradiance",
+        "GHI_Wh/m2", "GHI_W/m2", "Solar", "SolarGHI",
+        "GlobalHorizontalIrradiance", "GHI_kWh_m2",
+        "SolarRadiation", "Radiation", "solar")
+
+    found_wind = _fuzzy_find_column(cols,
+        col_wind, "WindSpeed_10m_mps", "WindSpeed", "Wind_Speed",
+        "wind_ms", "wind_mps", "Wind_ms", "Wind_mps",
+        "Wind", "wind", "WindSpeed_mps", "V_wind", "Vwind",
+        "WindVelocity", "Wind_m_s", "WindSpeed_m_s",
+        "WindSpeedAt10m", "wind_speed")
+
+    found_temp = _fuzzy_find_column(cols,
+        col_temp, "Temperature_C", "Temperature", "Temp",
+        "AirTemp", "Air_Temp", "Tamb", "T_amb",
+        "Temp_C", "TempC", "DryBulb", "DBT")
+
+    found_load = _fuzzy_find_column(cols,
+        col_load, "Load_kW", "Load", "load",
+        "load_kW", "Load_KW", "load_kw",
+        "Demand", "Demand_kW", "Power", "Power_kW",
+        "ElecLoad", "ElecDemand", "ActivePower",
+        "Consumption", "Consumption_kW", "TotalLoad")
+
+    # ── Report what was found ──
+    missing = []
+    if found_ghi  is None: missing.append("GHI (solar irradiance)")
+    if found_wind is None: missing.append("WindSpeed")
+    if found_load is None: missing.append("Load_kW")
+
+    if missing:
+        raise KeyError(
+            f"Could not find required columns: {missing}\n"
+            f"Your file has columns: {cols}\n"
+            f"Required: one column each for solar GHI (Wh/m²), wind speed (m/s), "
+            f"and electrical load (kW). Column names can vary — see docs."
+        )
+
+    logger.info("Step 1 — Column mapping: GHI=%s | Wind=%s | Temp=%s | Load=%s",
+                found_ghi, found_wind, found_temp, found_load)
+
+    # ── Extract arrays ──
+    ghi  = df[found_ghi].to_numpy(dtype=float)
+    wind = df[found_wind].to_numpy(dtype=float)
+    load = df[found_load].to_numpy(dtype=float)
+
+    # ── Auto-detect and convert GHI units ──
+    # Files may use kW/m² or kWh/m² (range 0–1) instead of Wh/m² (range 0–1000)
+    ghi_multiplier = _detect_ghi_unit(ghi, found_ghi)
+    ghi = ghi * ghi_multiplier
+
+    # Temperature is optional — default to 25°C if not found
+    if found_temp is not None:
+        temp = df[found_temp].to_numpy(dtype=float)
+    else:
+        logger.warning("Step 1 — Temperature column not found; using 25°C constant")
+        temp = np.full(len(ghi), 25.0)
+
+    time_arr = df[found_time].to_numpy() if found_time else np.arange(len(df))
+
+    N = len(ghi)
+    # Clean NaN/invalid values in GHI before stats (NaN from source data)
+    ghi_clean = np.nan_to_num(ghi, nan=0.0)
+    ghi_clean = np.clip(ghi_clean, 0, None)
+    # Write back cleaned GHI into the array used for BaseData
+    ghi = ghi_clean
+
+    logger.info("Step 1 — Loaded %d hours | Avg Load: %.2f kW | Peak: %.2f kW | "
+                "Avg GHI: %.1f Wh/m² | Avg Wind: %.2f m/s",
+                N, np.nanmean(load), np.nanmax(load), np.nanmean(ghi), np.nanmean(wind))
+
+    return BaseData(time=time_arr, ghi=ghi, wind_speed=wind,
+                    temperature=temp, load=load, N=N)
+
+
+def step1_generate_synthetic(N: int = 8760, seed: int = 42) -> BaseData:
+    """
+    Generate synthetic but physically realistic data for Akhnoor-style site.
+    Used when no real dataset is provided — matches statistical profile
+    described in the research framework.
+    """
+    rng = np.random.default_rng(seed)
+    hours = np.arange(N)
+
+    # ── Solar GHI (Wh/m²) — seasonal + diurnal pattern ──
+    day_of_year = (hours // 24) % 365
+    hour_of_day = hours % 24
+
+    # Seasonal solar amplitude (J&K: strong summer, low winter)
+    seasonal = 600 + 200 * np.sin(2 * np.pi * (day_of_year - 80) / 365)
+    # Diurnal bell curve
+    diurnal = np.maximum(0.0,
+        np.exp(-0.5 * ((hour_of_day - 12.5) / 3.2) ** 2))
+    ghi = seasonal * diurnal + rng.normal(0, 30, N)
+    ghi = np.clip(ghi, 0, 1050)
+
+    # ── Wind Speed (m/s) — Weibull-like, higher in winter/spring ──
+    seasonal_wind = 5.5 + 1.5 * np.cos(2 * np.pi * (day_of_year - 30) / 365)
+    wind_speed = rng.weibull(2.1, N) * seasonal_wind / 1.13  # scale to mean
+    wind_speed = np.clip(wind_speed, 0, 28)
+
+    # ── Temperature (°C) ──
+    temperature = 22 + 13 * np.sin(2 * np.pi * (day_of_year - 100) / 365) \
+                  + rng.normal(0, 2, N)
+
+    # ── Load (kW) — residential/commercial mix ──
+    # Morning & evening peaks, seasonal variation
+    base_load = 280
+    morn_peak = 60 * np.exp(-0.5 * ((hour_of_day - 8) / 1.5) ** 2)
+    eve_peak  = 100 * np.exp(-0.5 * ((hour_of_day - 19) / 2.0) ** 2)
+    seasonal_l = 40 * np.sin(2 * np.pi * (day_of_year - 200) / 365)  # summer AC
+    load = base_load + morn_peak + eve_peak + seasonal_l \
+           + rng.normal(0, 15, N)
+    load = np.clip(load, 80, 600)
+
+    logger.info("Step 1 — Synthetic data generated: %d hours | Avg Load: %.2f kW", N, np.mean(load))
+
+    time_arr = np.arange(N, dtype=float)
+    return BaseData(time=time_arr, ghi=ghi, wind_speed=wind_speed,
+                    temperature=temperature, load=load, N=N)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  STEP 2  —  SOLAR GENERATION MODEL
+# ══════════════════════════════════════════════════════════════════════════════
+
+def step2_solar_model(base: BaseData, pv_capacity_kWp: float = 500.0) -> SolarData:
+    """
+    Replicates Step2_Solar_Model.m
+    Simple efficiency-based PV model: P = η × A × GHI
+    Equivalent: P_PV = P_rated × (GHI / 1000)
+    Temperature derating included (optional; matches MATLAB simplified form).
+    """
+    ghi = base.ghi.copy()
+    # Clean bad values (matching MATLAB: GHI == -999 → NaN → linear fill)
+    ghi[ghi == -999] = np.nan
+    if np.any(np.isnan(ghi)):
+        df_tmp = pd.Series(ghi)
+        ghi = df_tmp.interpolate(method="linear").ffill().bfill().to_numpy()
+    ghi = np.clip(ghi, 0, None)
+
+    p_solar = pv_capacity_kWp * (ghi / 1000.0)   # kW
+    annual  = float(np.sum(p_solar) / 1000.0)     # MWh
+
+    logger.info("Step 2 — Solar: %.0f kWp | Annual: %.2f MWh | CF: %.3f",
+                pv_capacity_kWp, annual, annual / (pv_capacity_kWp * 8.76))
+    return SolarData(p_solar=p_solar, annual_solar_MWh=annual)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  STEP 3  —  WIND GENERATION MODEL
+# ══════════════════════════════════════════════════════════════════════════════
+
+def step3_wind_model(
+    base: BaseData,
+    wind_capacity_kW: float = 200.0,
+    v_ci: float = 3.0,
+    v_r:  float = 12.0,
+    v_co: float = 25.0,
+) -> WindData:
+    """
+    Replicates Step3_Wind_Model.m
+    Piecewise cubic wind turbine power curve.
+    """
+    V = base.wind_speed
+    N = base.N
+
+    p_wind = np.where(
+        (V < v_ci) | (V >= v_co), 0.0,
+        np.where(
+            V < v_r,
+            wind_capacity_kW * ((V - v_ci) / (v_r - v_ci)) ** 3,
+            wind_capacity_kW
+        )
+    )
+
+    annual = float(np.sum(p_wind) / 1000.0)
+    logger.info("Step 3 — Wind: %.0f kW | Annual: %.2f MWh | CF: %.3f",
+                wind_capacity_kW, annual, annual / (wind_capacity_kW * 8.76))
+    return WindData(p_wind=p_wind, annual_wind_MWh=annual)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  STEP 4  —  HYBRID GENERATION (SOLAR + WIND)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def step4_hybrid_generation(solar: SolarData, wind: WindData) -> HybridData:
+    """
+    Replicates Step4_Hybrid.m — simply sums solar + wind.
+    """
+    p_gen  = solar.p_solar + wind.p_wind
+    annual = float(np.sum(p_gen) / 1000.0)
+    logger.info("Step 4 — Hybrid total: %.2f MWh/year", annual)
+    return HybridData(p_gen=p_gen, annual_hybrid_MWh=annual)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  STEP 5 (MATLAB Step 5)  —  PRIORITY BATTERY DISPATCH
+# ══════════════════════════════════════════════════════════════════════════════
+
+def step5_priority_battery(
+    base: BaseData,
+    hybrid: HybridData,
+    battery_cap_kWh: float = 20_000.0,
+    critical_frac: float = 0.60,
+    semi_frac:     float = 0.25,
+    non_frac:      float = 0.15,
+) -> BatteryDispatchResult:
+    """
+    Replicates Step5_Priority_Battery_Model.m
+    Priority dispatch: Critical → Semi → Non.
+    Battery supports critical load only.
+    """
+    Load   = base.load
+    P_gen  = hybrid.p_gen
+    N      = base.N
+
+    Lc = critical_frac * Load
+    Ls = semi_frac     * Load
+    Ln = non_frac      * Load
+
+    SOC     = 0.8 * battery_cap_kWh
+    SOC_min = 0.2 * battery_cap_kWh
+
+    unmet_c  = 0.0
+    curt_s   = 0.0
+    curt_n   = 0.0
+
+    for t in range(N):
+        gen = P_gen[t]
+        SOC = max(SOC, SOC_min)
+
+        # ── Critical ──
+        net = gen - Lc[t]
+        if net >= 0:
+            gen = net
+        else:
+            deficit = -net
+            avail   = max(SOC - SOC_min, 0.0)
+            dis     = min(deficit, avail)
+            SOC     -= dis
+            deficit -= dis
+            if deficit > 0:
+                unmet_c += deficit
+            gen = 0.0
+
+        # ── Semi ──
+        if gen > 0:
+            if gen >= Ls[t]:
+                gen -= Ls[t]
+            else:
+                curt_s += Ls[t] - gen
+                gen = 0.0
+        else:
+            curt_s += Ls[t]
+
+        # ── Non ──
+        if gen > 0:
+            if gen >= Ln[t]:
+                gen -= Ln[t]
+            else:
+                curt_n += Ln[t] - gen
+                gen = 0.0
+        else:
+            curt_n += Ln[t]
+
+        # ── Charge battery with surplus ──
+        if gen > 0:
+            charge = min(gen, battery_cap_kWh - SOC)
+            SOC   += charge
+
+    total_c = float(np.sum(Lc))
+    lpsp    = unmet_c / total_c if total_c > 0 else 0.0
+
+    logger.info("Step 5 — Battery Dispatch | LPSP_crit: %.4f | Curtailed Semi: %.2f MWh",
+                lpsp, curt_s / 1000)
+    return BatteryDispatchResult(
+        lpsp_critical=lpsp,
+        curtailed_semi_MWh=curt_s / 1000,
+        curtailed_non_MWh=curt_n / 1000,
+        battery_cap_kWh=battery_cap_kWh,
+        unmet_critical_kWh=unmet_c,
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  STEP 6 (MATLAB Step 6)  —  SEASONAL ENERGY IMBALANCE ANALYSIS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def step6_seasonal_analysis(base: BaseData, hybrid: HybridData) -> SeasonalAnalysis:
+    """
+    Replicates Step6_Seasonal_Analysis_Akhnoor.m
+    Cumulative net energy method to estimate required long-term storage.
+    """
+    net = hybrid.p_gen - base.load          # kW (positive = surplus)
+    cum = np.cumsum(net)
+    cum_shifted = cum - np.min(cum)         # shift to start at 0
+    req_storage = float(np.max(cum_shifted))
+
+    logger.info("Step 6 — Required Seasonal Storage: %.2f MWh", req_storage / 1000)
+    return SeasonalAnalysis(
+        required_storage_MWh=req_storage / 1000,
+        cumulative_energy=cum_shifted,
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  STEP 7 (MATLAB Step 7)  —  BATTERY + HYDROGEN PRIORITY DISPATCH
+# ══════════════════════════════════════════════════════════════════════════════
+
+def step7_priority_h2(
+    base: BaseData,
+    hybrid: HybridData,
+    battery_cap_kWh: float = 20_000.0,
+    h2_cap_kWh: float = 300_000.0,
+    critical_frac: float = 0.60,
+    semi_frac:     float = 0.25,
+    non_frac:      float = 0.15,
+) -> H2DispatchResult:
+    """
+    Replicates Step7_Priority_H2_Model.m
+    Battery first → Hydrogen for critical load deficit.
+    """
+    Load  = base.load
+    P_gen = hybrid.p_gen
+    N     = base.N
+
+    Lc = critical_frac * Load
+    Ls = semi_frac * Load
+    Ln = non_frac  * Load
+
+    SOC     = 0.8 * battery_cap_kWh
+    SOC_min = 0.2 * battery_cap_kWh
+    H2      = 0.5 * h2_cap_kWh
+
+    unmet_c = 0.0
+    curt_s  = 0.0
+    curt_n  = 0.0
+
+    for t in range(N):
+        gen = P_gen[t]
+        SOC = max(SOC, SOC_min)
+
+        # ── Critical ──
+        net = gen - Lc[t]
+        if net >= 0:
+            gen = net
+        else:
+            deficit = -net
+
+            # Battery
+            avail_bat = max(SOC - SOC_min, 0.0)
+            dis_bat   = min(deficit, avail_bat)
+            SOC      -= dis_bat
+            deficit  -= dis_bat
+
+            # Hydrogen
+            dis_h2  = min(deficit, H2)
+            H2     -= dis_h2
+            deficit -= dis_h2
+
+            if deficit > 0:
+                unmet_c += deficit
+            gen = 0.0
+
+        # ── Semi ──
+        if gen > 0:
+            if gen >= Ls[t]:
+                gen -= Ls[t]
+            else:
+                curt_s += Ls[t] - gen
+                gen = 0.0
+        else:
+            curt_s += Ls[t]
+
+        # ── Non ──
+        if gen > 0:
+            if gen >= Ln[t]:
+                gen -= Ln[t]
+            else:
+                curt_n += Ln[t] - gen
+                gen = 0.0
+        else:
+            curt_n += Ln[t]
+
+        # ── Store surplus: Battery first, then H2 ──
+        if gen > 0:
+            charge = min(gen, battery_cap_kWh - SOC)
+            SOC   += charge
+            gen   -= charge
+            H2     = min(H2 + gen, h2_cap_kWh)
+
+    total_c = float(np.sum(Lc))
+    lpsp    = unmet_c / total_c if total_c > 0 else 0.0
+
+    # Raw critical deficit (generation vs critical load, no storage)
+    raw_deficit = float(np.sum(np.maximum(Lc - P_gen, 0.0)))
+
+    logger.info("Step 7 — H2 Dispatch | LPSP_crit: %.4f | Raw deficit: %.2f MWh",
+                lpsp, raw_deficit / 1000)
+    return H2DispatchResult(
+        lpsp_critical=lpsp,
+        curtailed_semi_MWh=curt_s / 1000,
+        curtailed_non_MWh=curt_n / 1000,
+        battery_cap_kWh=battery_cap_kWh,
+        h2_cap_kWh=h2_cap_kWh,
+        raw_critical_deficit_MWh=raw_deficit / 1000,
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  STEP 8 (MATLAB Step 8)  —  DEFICIT WINDOW ANALYSIS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def step8_deficit_window(base: BaseData, hybrid: HybridData) -> DeficitWindowResult:
+    """
+    Replicates Step8_Deficit_Window_Analysis.m
+    Finds the longest consecutive deficit window and its energy magnitude.
+    """
+    net  = hybrid.p_gen - base.load
+    flag = net < 0
+
+    max_hours  = 0
+    max_energy = 0.0
+    cur_hours  = 0
+    cur_energy = 0.0
+
+    for t in range(base.N):
+        if flag[t]:
+            cur_hours  += 1
+            cur_energy += abs(net[t])
+        else:
+            if cur_hours > max_hours:
+                max_hours  = cur_hours
+                max_energy = cur_energy
+            cur_hours  = 0
+            cur_energy = 0.0
+
+    # Final check (if year ends in deficit)
+    if cur_hours > max_hours:
+        max_hours  = cur_hours
+        max_energy = cur_energy
+
+    logger.info("Step 8 — Max deficit window: %d h (%.2f days) | Energy: %.2f MWh",
+                max_hours, max_hours / 24, max_energy / 1000)
+    return DeficitWindowResult(
+        max_consecutive_hours=max_hours,
+        max_consecutive_days=max_hours / 24,
+        max_consecutive_energy_MWh=max_energy / 1000,
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  STEP 9 (MATLAB Step 9)  —  SURVIVABILITY-BASED H2 SIZING
+# ══════════════════════════════════════════════════════════════════════════════
+
+def step9_survivability_sizing(
+    base: BaseData,
+    critical_frac: float = 0.60,
+    baseline_days: int = 15,
+    stress_days:   int = 30,
+) -> Survivabilitysizing:
+    """
+    Replicates Step9_Survivability_H2_Sizing.m
+    Computes hydrogen capacity needed to cover critical load
+    for 15-day and 30-day autonomous operation.
+    """
+    Lc = critical_frac * base.load
+    daily_energy = float(np.mean(Lc) * 24)   # kWh/day
+
+    h2_baseline = baseline_days * daily_energy
+    h2_stress   = stress_days   * daily_energy
+
+    logger.info("Step 9 — H2 Sizing | Daily: %.2f kWh | 15d: %.2f MWh | 30d: %.2f MWh",
+                daily_energy, h2_baseline / 1000, h2_stress / 1000)
+    return Survivabilitysizing(
+        critical_daily_energy_kWh=daily_energy,
+        h2_baseline_kWh=h2_baseline,
+        h2_stress_kWh=h2_stress,
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  STEP 10 (MATLAB Step 10)  —  SURVIVABILITY DISPATCH TEST
+# ══════════════════════════════════════════════════════════════════════════════
+
+def step10_survivability_dispatch(
+    base: BaseData,
+    hybrid: HybridData,
+    battery_cap_kWh: float = 20_000.0,
+    h2_cap_kWh: float = 30_240.0,      # MATLAB default (30-day baseline)
+    critical_frac: float = 0.60,
+    semi_frac:     float = 0.25,
+    non_frac:      float = 0.15,
+) -> H2DispatchResult:
+    """
+    Replicates Step10_Priority_H2_Survivability.m
+    Uses survivability-sized H2 with full priority dispatch.
+    """
+    # Reuses the same dispatch logic as step7 (same code structure in MATLAB)
+    return step7_priority_h2(
+        base, hybrid,
+        battery_cap_kWh=battery_cap_kWh,
+        h2_cap_kWh=h2_cap_kWh,
+        critical_frac=critical_frac,
+        semi_frac=semi_frac,
+        non_frac=non_frac,
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  FULL 8760-HOUR SIMULATION  (microgrid_priority_dispatch_full_v2)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def microgrid_dispatch_full(
+    x: np.ndarray | list,
+    base: BaseData,
+    eta_ch: float  = 0.95,
+    eta_dis: float = 0.95,
+    eta_EL: float  = 0.70,
+    eta_FC: float  = 0.55,
+    lpsp_tol: float = 0.001,
+    store_series: bool = False,
+) -> SimulationResult:
+    """
+    Exact Python translation of microgrid_priority_dispatch_full_v2.m
+
+    x = [PV_kWp, Wind_kW, Battery_kWh, Electrolyzer_kW, H2_kWh, FuelCell_kW]
+    """
+    PV_rated  = float(x[0])
+    WT_rated  = float(x[1])
+    E_BESS    = float(x[2])
+    P_EL_max  = float(x[3])
+    E_H2_max  = float(x[4])
+    P_FC_max  = float(x[5])
+
+    GHI  = base.ghi.copy()
+    Wind = base.wind_speed
+    Load = base.load
+    N    = base.N
+
+    # ── Clean GHI ──
+    GHI[GHI == -999] = np.nan
+    if np.any(np.isnan(GHI)):
+        s = pd.Series(GHI)
+        GHI = s.interpolate(method="linear").ffill().bfill().to_numpy()
+    GHI = np.clip(GHI, 0, None)
+
+    # ── Renewable Generation ──
+    P_PV = PV_rated * (GHI / 1000.0)
+
+    # Wind piecewise cubic
+    v_ci, v_r, v_co = 3.0, 12.0, 25.0
+    P_WT = np.where(
+        (Wind < v_ci) | (Wind >= v_co), 0.0,
+        np.where(Wind < v_r,
+                 WT_rated * ((Wind - v_ci) / (v_r - v_ci)) ** 3,
+                 WT_rated)
+    )
+    P_RES = P_PV + P_WT
+
+    # ── Priority Load Split ──
+    Lc = 0.60 * Load
+    Ls = 0.25 * Load
+    Ln = 0.15 * Load
+
+    # ── Initial States ──
+    SOC     = 0.8     # normalised [0,1]
+    SOC_min = 0.2
+    SOC_max = 0.95
+
+    E_H2    = 0.5 * E_H2_max   # kWh
+
+    unmet_c = 0.0
+    curt_s  = 0.0
+    curt_n  = 0.0
+
+    if store_series:
+        soc_arr = np.empty(N)
+        h2_arr  = np.empty(N)
+    else:
+        soc_arr = h2_arr = None
+
+    # ── 8760-Hour Loop ──
+    for t in range(N):
+        P_avail = P_RES[t]
+
+        # ─── 1) Critical Load ───
+        deficit = Lc[t] - P_avail
+        if deficit <= 0:
+            P_avail = -deficit     # surplus carries forward
+        else:
+            # Battery discharge
+            E_avail    = (SOC - SOC_min) * E_BESS
+            P_BESS_dis = min(deficit, E_avail * eta_dis)
+            SOC       -= P_BESS_dis / (eta_dis * E_BESS) if E_BESS > 0 else 0.0
+            deficit   -= P_BESS_dis
+
+            # Fuel cell discharge
+            P_FC       = min(deficit, P_FC_max)
+            E_req      = P_FC / eta_FC if eta_FC > 0 else 0.0
+            E_used     = min(E_req, E_H2)
+            P_FC_act   = E_used * eta_FC
+            E_H2      -= E_used
+            deficit   -= P_FC_act
+
+            if deficit > 0:
+                unmet_c += deficit
+            P_avail = 0.0
+
+        # ─── 2) Semi-critical ───
+        if P_avail >= Ls[t]:
+            P_avail -= Ls[t]
+        else:
+            curt_s  += Ls[t] - P_avail
+            P_avail  = 0.0
+
+        # ─── 3) Non-critical ───
+        if P_avail >= Ln[t]:
+            P_avail -= Ln[t]
+        else:
+            curt_n  += Ln[t] - P_avail
+            P_avail  = 0.0
+
+        # ─── 4) Store surplus ───
+        if P_avail > 0:
+            E_space    = (SOC_max - SOC) * E_BESS
+            P_BESS_ch  = min(P_avail, E_space / eta_ch) if eta_ch > 0 else 0.0
+            SOC       += eta_ch * P_BESS_ch / E_BESS if E_BESS > 0 else 0.0
+            P_avail   -= P_BESS_ch
+
+            P_EL       = min(P_avail, P_EL_max)
+            E_H2       = min(E_H2 + P_EL * eta_EL, E_H2_max)
+
+        # Enforce bounds
+        SOC  = np.clip(SOC,  SOC_min, SOC_max)
+        E_H2 = np.clip(E_H2, 0.0,    E_H2_max)
+
+        if store_series:
+            soc_arr[t] = SOC
+            h2_arr[t]  = E_H2
+
+    # ── Metrics ──
+    total_c    = float(np.sum(Lc))
+    total_load = float(np.sum(Load))
+    total_RES  = float(np.sum(P_RES))
+
+    lpsp       = unmet_c / total_c if total_c > 0 else 0.0
+
+    is_feasible = True
+    if lpsp > lpsp_tol:
+        is_feasible = False
+    if total_RES < total_load:
+        is_feasible = False
+
+    return SimulationResult(
+        is_feasible=is_feasible,
+        lpsp_critical=lpsp,
+        curtailed_semi_MWh=curt_s / 1000,
+        curtailed_non_MWh=curt_n / 1000,
+        total_renewable_MWh=total_RES / 1000,
+        annual_load_MWh=total_load / 1000,
+        soc_series=soc_arr,
+        h2_series=h2_arr,
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  STEP 11  —  MPBSI EVALUATOR  (MPBSI_Evaluator_v3.m)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def mpbsi_evaluator(x: np.ndarray | list, base: BaseData) -> MPBSIResult:
+    """
+    Exact Python translation of MPBSI_Evaluator_v3.m
+
+    Returns MPBSI score and all five pillar indices.
+    Returns mpbsi = -1e6 if infeasible.
+    """
+    x = np.asarray(x, dtype=float)
+
+    # ── Full simulation ──
+    sim = microgrid_dispatch_full(x, base)
+
+    if not sim.is_feasible:
+        dummy_pillars = Pillars(ESI=0, EcSI=0, TRI=0, ORI=0, LSI=0)
+        return MPBSIResult(mpbsi=-1e6, pillars=dummy_pillars,
+                           is_feasible=False, simulation=sim)
+
+    Annual_Load = sim.annual_load_MWh
+    Annual_RES  = sim.total_renewable_MWh
+
+    # ── 1. Environmental Sustainability Index (ESI) ──
+    E1 = 1.0                                               # fully renewable
+    E2 = min(1.0, Annual_RES / Annual_Load)               # generation adequacy
+    Excess = max(Annual_RES - Annual_Load, 0.0)
+    E3 = 1.0 - Excess / Annual_RES if Annual_RES > 0 else 0.0  # low curtailment
+    E4 = min(1.0, x[2] / 60_000.0)                        # battery utilisation
+
+    alpha = [0.25, 0.35, 0.20, 0.20]
+    ESI = alpha[0]*E1 + alpha[1]*E2 + alpha[2]*E3 + alpha[3]*E4
+
+    # ── 2. Economic Sustainability Index (EcSI) ──
+    # Indian market costs (₹)
+    Cost_PV  = 55_000  * x[0]
+    Cost_WT  = 120_000 * x[1]
+    Cost_Bat = 22_000  * x[2]
+    Cost_EL  = 70_000  * x[3]
+    Cost_H2  = 80_000  * x[4]   # Note: MATLAB uses 80k for H2 storage
+    Cost_FC  = 110_000 * x[5]
+
+    CAPEX = Cost_PV + Cost_WT + Cost_Bat + Cost_EL + Cost_H2 + Cost_FC
+
+    r = 0.08   # discount rate
+    n = 20     # system lifetime (years)
+
+    # Replacement costs (discounted mid-life)
+    Bat_repl = Cost_Bat / (1 + r) ** 10
+    FC_repl  = Cost_FC  / (1 + r) ** 10
+    EL_repl  = Cost_EL  / (1 + r) ** 15
+
+    OM_annual = 0.02 * CAPEX
+    annuity   = (1 - (1 + r) ** (-n)) / r
+    OM_PV     = OM_annual * annuity
+
+    NPC     = CAPEX + Bat_repl + FC_repl + EL_repl + OM_PV
+    NPC_norm = NPC / 1e10
+    C1 = 1.0 / (1.0 + NPC_norm)
+    C2 = C1
+    C3 = 1.0 - min(1.0, (x[2] + x[4]) / 150_000.0)
+    C4 = 1.0   # no diesel logistics
+
+    beta = [0.35, 0.30, 0.20, 0.15]
+    EcSI = beta[0]*C1 + beta[1]*C2 + beta[2]*C3 + beta[3]*C4
+
+    # ── 3. Technical Reliability Index (TRI) ──
+    T1 = 1.0 - sim.lpsp_critical
+    Autonomy = (x[2] + x[4]) / (Annual_Load * 1000 / 365) if Annual_Load > 0 else 0.0
+    T2 = min(1.0, Autonomy / 30.0)
+    T3 = min(1.0, x[5] / 800.0)   # Fuel cell redundancy
+    T4 = 1.0
+
+    gamma = [0.40, 0.30, 0.20, 0.10]
+    TRI = gamma[0]*T1 + gamma[1]*T2 + gamma[2]*T3 + gamma[3]*T4
+
+    # ── 4. Operational Resilience Index (ORI) ──
+    R1 = T1
+    Wind_fraction = min(1.0, (Annual_RES - max(Annual_RES - Annual_Load, 0.0)) / Annual_Load) \
+                    if Annual_Load > 0 else 0.0
+    R2 = Wind_fraction
+    R3 = 1.0
+    R4 = min(1.0, x[5] / 800.0)
+
+    delta = [0.35, 0.25, 0.20, 0.20]
+    ORI = delta[0]*R1 + delta[1]*R2 + delta[2]*R3 + delta[3]*R4
+
+    # ── 5. Logistics Sustainability Index (LSI) ──
+    L1 = 1.0
+    L2 = min(1.0, Annual_RES / Annual_Load) if Annual_Load > 0 else 0.0
+    L3 = 1.0 - min(1.0, (x[2] + x[4]) / 150_000.0)
+    L4 = min(1.0, x[2] / 60_000.0)
+    L5 = 1.0
+
+    eta_w = [0.25, 0.25, 0.20, 0.15, 0.15]
+    LSI = eta_w[0]*L1 + eta_w[1]*L2 + eta_w[2]*L3 + eta_w[3]*L4 + eta_w[4]*L5
+
+    # ── Final MPBSI ──
+    wE, wC, wT, wR, wL = 0.15, 0.15, 0.30, 0.25, 0.15
+    MPBSI = wE*ESI + wC*EcSI + wT*TRI + wR*ORI + wL*LSI
+
+    pillars = Pillars(ESI=round(ESI,6), EcSI=round(EcSI,6),
+                      TRI=round(TRI,6),  ORI=round(ORI,6),
+                      LSI=round(LSI,6))
+
+    return MPBSIResult(mpbsi=round(MPBSI,6), pillars=pillars,
+                       is_feasible=True, simulation=sim)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  STEP 12a  —  PSO OPTIMIZATION  (PSO_MPBSI_Optimization.m)
+# ══════════════════════════════════════════════════════════════════════════════
+
+VAR_BOUNDS = {
+    # EXACT bounds from PSO_MPBSI_Optimization.m:
+    # VarMin = [300   0     10000   50    10000   100]
+    # VarMax = [1200  500   65000   500   80000   600]
+    # x = [PV_kWp, Wind_kW, Battery_kWh, Electrolyzer_kW, H2_kWh, FuelCell_kW]
+    "min": np.array([ 300,   0,   10_000,   50,   10_000,  100], dtype=float),
+    "max": np.array([1200, 500,   65_000,  500,   80_000,  600], dtype=float),
+}
+VAR_NAMES = ["PV_kWp", "Wind_kW", "Battery_kWh", "Electrolyzer_kW", "H2_kWh", "FuelCell_kW"]
+
+
+def pso_optimize(
+    base: BaseData,
+    n_pop: int   = 30,
+    max_it: int  = 40,
+    w:  float    = 0.7,
+    c1: float    = 1.5,
+    c2: float    = 1.5,
+    seed: int    = 42,
+    var_min: Optional[np.ndarray] = None,
+    var_max: Optional[np.ndarray] = None,
+) -> OptimizationResult:
+    """
+    Exact Python translation of PSO_MPBSI_Optimization.m
+
+    Maximises MPBSI (single-objective).
+    """
+    rng = np.random.default_rng(seed)
+    t0  = time.perf_counter()
+
+    vmin = var_min if var_min is not None else VAR_BOUNDS["min"].copy()
+    vmax = var_max if var_max is not None else VAR_BOUNDS["max"].copy()
+    nVar = len(vmin)
+
+    def evaluate(pos):
+        res = mpbsi_evaluator(pos, base)
+        return res.mpbsi, res
+
+    # ── Initialization ──
+    positions  = rng.uniform(vmin, vmax, (n_pop, nVar))
+    velocities = np.zeros((n_pop, nVar))
+    costs      = np.full(n_pop, -np.inf)
+    pbest_pos  = positions.copy()
+    pbest_cost = np.full(n_pop, -np.inf)
+
+    gbest_pos  = positions[0].copy()
+    gbest_cost = -np.inf
+    gbest_result: Optional[MPBSIResult] = None
+
+    for i in range(n_pop):
+        c, r = evaluate(positions[i])
+        costs[i]      = c
+        pbest_pos[i]  = positions[i].copy()
+        pbest_cost[i] = c
+        if c > gbest_cost:
+            gbest_cost   = c
+            gbest_pos    = positions[i].copy()
+            gbest_result = r
+
+    convergence = [float(gbest_cost)]
+    logger.info("PSO init | Best MPBSI = %.4f", gbest_cost)
+
+    # ── Main Loop ──
+    for it in range(1, max_it + 1):
+        for i in range(n_pop):
+            r1 = rng.random(nVar)
+            r2 = rng.random(nVar)
+
+            velocities[i] = (w * velocities[i]
+                             + c1 * r1 * (pbest_pos[i] - positions[i])
+                             + c2 * r2 * (gbest_pos   - positions[i]))
+
+            positions[i] = np.clip(positions[i] + velocities[i], vmin, vmax)
+
+            c, r = evaluate(positions[i])
+            costs[i] = c
+
+            if c > pbest_cost[i]:
+                pbest_pos[i]  = positions[i].copy()
+                pbest_cost[i] = c
+
+            if c > gbest_cost:
+                gbest_cost   = c
+                gbest_pos    = positions[i].copy()
+                gbest_result = r
+
+        convergence.append(float(gbest_cost))
+        logger.info("PSO it %2d | Best MPBSI = %.4f", it, gbest_cost)
+
+    runtime = time.perf_counter() - t0
+    logger.info("PSO done | Best MPBSI = %.4f | Runtime: %.1f s", gbest_cost, runtime)
+
+    metrics = {}
+    if gbest_result and gbest_result.is_feasible:
+        metrics = {
+            "lpsp_critical": gbest_result.simulation.lpsp_critical,
+            "total_renewable_MWh": gbest_result.simulation.total_renewable_MWh,
+            "annual_load_MWh": gbest_result.simulation.annual_load_MWh,
+            "curtailed_semi_MWh": gbest_result.simulation.curtailed_semi_MWh,
+            "curtailed_non_MWh": gbest_result.simulation.curtailed_non_MWh,
+        }
+
+    return OptimizationResult(
+        algorithm="PSO",
+        best_x=gbest_pos.tolist(),
+        best_mpbsi=float(gbest_cost),
+        best_pillars=gbest_result.pillars.to_dict() if gbest_result else {},
+        convergence=convergence,
+        runtime_seconds=round(runtime, 2),
+        feasible=bool(gbest_result.is_feasible if gbest_result else False),
+        reliability_metrics=metrics,
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  STEP 12b  —  NSGA-II MULTI-OBJECTIVE OPTIMIZATION
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _fast_non_dominated_sort(costs: np.ndarray):
+    """NSGA-II fast non-dominated sorting (minimisation assumed → negate for max)."""
+    n = len(costs)
+    S = [[] for _ in range(n)]    # dominated solutions
+    ndom = np.zeros(n, dtype=int) # domination counter
+    rank = np.zeros(n, dtype=int)
+    fronts = [[]]
+
+    for p in range(n):
+        for q in range(n):
+            if p == q:
+                continue
+            # p dominates q if all objectives of p ≤ q and at least one <
+            if np.all(costs[p] <= costs[q]) and np.any(costs[p] < costs[q]):
+                S[p].append(q)
+            elif np.all(costs[q] <= costs[p]) and np.any(costs[q] < costs[p]):
+                ndom[p] += 1
+        if ndom[p] == 0:
+            rank[p] = 0
+            fronts[0].append(p)
+
+    i = 0
+    while fronts[i]:
+        next_front = []
+        for p in fronts[i]:
+            for q in S[p]:
+                ndom[q] -= 1
+                if ndom[q] == 0:
+                    rank[q] = i + 1
+                    next_front.append(q)
+        i += 1
+        fronts.append(next_front)
+
+    return [f for f in fronts if f], rank
+
+
+def _crowding_distance(costs: np.ndarray, front: list) -> np.ndarray:
+    """NSGA-II crowding distance assignment."""
+    n  = len(front)
+    m  = costs.shape[1]
+    cd = np.zeros(n)
+
+    for obj in range(m):
+        order = np.argsort(costs[front, obj])
+        cd[order[0]]  = np.inf
+        cd[order[-1]] = np.inf
+        f_range = costs[front[order[-1]], obj] - costs[front[order[0]], obj]
+        if f_range == 0:
+            continue
+        for k in range(1, n - 1):
+            cd[order[k]] += (costs[front[order[k+1]], obj] -
+                             costs[front[order[k-1]], obj]) / f_range
+    return cd
+
+
+def nsga2_optimize(
+    base: BaseData,
+    n_pop: int   = 40,
+    max_gen: int = 30,
+    seed: int    = 42,
+    var_min: Optional[np.ndarray] = None,
+    var_max: Optional[np.ndarray] = None,
+) -> OptimizationResult:
+    """
+    NSGA-II multi-objective optimisation.
+    Objectives (5 pillars, all maximised → negate for minimisation):
+      f1 = -ESI, f2 = -EcSI, f3 = -TRI, f4 = -ORI, f5 = -LSI
+
+    Returns best composite MPBSI solution from Pareto front + full results.
+    """
+    rng  = np.random.default_rng(seed)
+    t0   = time.perf_counter()
+
+    vmin = var_min if var_min is not None else VAR_BOUNDS["min"].copy()
+    vmax = var_max if var_max is not None else VAR_BOUNDS["max"].copy()
+    nVar = len(vmin)
+    nObj = 5   # ESI, EcSI, TRI, ORI, LSI
+
+    def evaluate_multi(pos):
+        res = mpbsi_evaluator(pos, base)
+        if not res.is_feasible:
+            return np.array([1e6] * nObj), res
+        p = res.pillars
+        return np.array([-p.ESI, -p.EcSI, -p.TRI, -p.ORI, -p.LSI]), res
+
+    # ── Initialise population ──
+    pop      = rng.uniform(vmin, vmax, (n_pop, nVar))
+    obj_vals = np.empty((n_pop, nObj))
+    mpbsi_results: list[Optional[MPBSIResult]] = [None] * n_pop
+
+    for i in range(n_pop):
+        obj_vals[i], mpbsi_results[i] = evaluate_multi(pop[i])
+
+    convergence = []
+    best_mpbsi_ever = -np.inf
+    best_result_ever: Optional[MPBSIResult] = None
+    best_x_ever = pop[0].copy()
+
+    def _tournament(candidates, cd, ranks):
+        a, b = candidates
+        if ranks[a] < ranks[b]:
+            return a
+        elif ranks[b] < ranks[a]:
+            return b
+        elif cd[a] > cd[b]:
+            return a
+        return b
+
+    # ── SBX crossover ──
+    def sbx_crossover(p1, p2, eta=15.0):
+        u = rng.random(nVar)
+        beta = np.where(u < 0.5,
+                        (2 * u) ** (1 / (eta + 1)),
+                        (1 / (2 * (1 - u))) ** (1 / (eta + 1)))
+        c1 = 0.5 * ((1 + beta) * p1 + (1 - beta) * p2)
+        c2 = 0.5 * ((1 - beta) * p1 + (1 + beta) * p2)
+        return (np.clip(c1, vmin, vmax),
+                np.clip(c2, vmin, vmax))
+
+    # ── Polynomial mutation ──
+    def poly_mutate(x, eta=20.0, pm=None):
+        if pm is None:
+            pm = 1.0 / nVar
+        xm = x.copy()
+        for j in range(nVar):
+            if rng.random() < pm:
+                u = rng.random()
+                if u < 0.5:
+                    delta = (2 * u) ** (1 / (eta + 1)) - 1
+                else:
+                    delta = 1 - (2 * (1 - u)) ** (1 / (eta + 1))
+                xm[j] = np.clip(xm[j] + delta * (vmax[j] - vmin[j]), vmin[j], vmax[j])
+        return xm
+
+    # ── Main NSGA-II Loop ──
+    for gen in range(max_gen):
+        # Non-dominated sort of current population
+        fronts, ranks_arr = _fast_non_dominated_sort(obj_vals)
+
+        # Crowding distances
+        cd_arr = np.zeros(n_pop)
+        for front in fronts:
+            if len(front) < 2:
+                continue
+            cd = _crowding_distance(obj_vals, front)
+            for k, idx in enumerate(front):
+                cd_arr[idx] = cd[k]
+
+        # Generate offspring via tournament → crossover → mutation
+        offspring     = np.empty((n_pop, nVar))
+        off_obj       = np.empty((n_pop, nObj))
+        off_results   = [None] * n_pop
+
+        for i in range(0, n_pop, 2):
+            pool = rng.integers(0, n_pop, 4)
+            p1 = _tournament(pool[:2], cd_arr, ranks_arr)
+            p2 = _tournament(pool[2:], cd_arr, ranks_arr)
+
+            c1v, c2v = sbx_crossover(pop[p1], pop[p2])
+            c1v = poly_mutate(c1v)
+            c2v = poly_mutate(c2v)
+
+            offspring[i], off_results[i] = c1v, None
+            off_obj[i], off_results[i]   = evaluate_multi(c1v)
+            if i + 1 < n_pop:
+                offspring[i+1], off_results[i+1] = c2v, None
+                off_obj[i+1], off_results[i+1]   = evaluate_multi(c2v)
+
+        # Combined population: parents + offspring
+        combined_pop     = np.vstack([pop, offspring])
+        combined_obj     = np.vstack([obj_vals, off_obj])
+        combined_results = mpbsi_results + off_results
+
+        # Select next generation via non-dominated sort + crowding
+        fronts_c, _ = _fast_non_dominated_sort(combined_obj)
+        selected = []
+        for front in fronts_c:
+            if len(selected) + len(front) <= n_pop:
+                selected.extend(front)
+            else:
+                remaining = n_pop - len(selected)
+                cd = _crowding_distance(combined_obj, front)
+                order = np.argsort(-cd)
+                selected.extend([front[k] for k in order[:remaining]])
+                break
+
+        pop            = combined_pop[selected]
+        obj_vals       = combined_obj[selected]
+        mpbsi_results  = [combined_results[i] for i in selected]
+
+        # Track best MPBSI on Pareto front
+        gen_best = -np.inf
+        for i in range(n_pop):
+            r = mpbsi_results[i]
+            if r and r.is_feasible and r.mpbsi > gen_best:
+                gen_best = r.mpbsi
+            if r and r.is_feasible and r.mpbsi > best_mpbsi_ever:
+                best_mpbsi_ever = r.mpbsi
+                best_result_ever = r
+                best_x_ever = pop[i].copy()
+
+        convergence.append(float(gen_best if gen_best > -np.inf else best_mpbsi_ever))
+        logger.info("NSGA-II gen %2d | Best MPBSI = %.4f", gen + 1,
+                    convergence[-1])
+
+    runtime = time.perf_counter() - t0
+    logger.info("NSGA-II done | Best MPBSI = %.4f | Runtime: %.1f s",
+                best_mpbsi_ever, runtime)
+
+    metrics = {}
+    if best_result_ever and best_result_ever.is_feasible:
+        metrics = {
+            "lpsp_critical": best_result_ever.simulation.lpsp_critical,
+            "total_renewable_MWh": best_result_ever.simulation.total_renewable_MWh,
+            "annual_load_MWh": best_result_ever.simulation.annual_load_MWh,
+            "curtailed_semi_MWh": best_result_ever.simulation.curtailed_semi_MWh,
+            "curtailed_non_MWh": best_result_ever.simulation.curtailed_non_MWh,
+        }
+
+    return OptimizationResult(
+        algorithm="NSGA-II",
+        best_x=best_x_ever.tolist(),
+        best_mpbsi=float(best_mpbsi_ever),
+        best_pillars=best_result_ever.pillars.to_dict() if best_result_ever else {},
+        convergence=convergence,
+        runtime_seconds=round(runtime, 2),
+        feasible=bool(best_result_ever.is_feasible if best_result_ever else False),
+        reliability_metrics=metrics,
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  PIPELINE ORCHESTRATOR  —  run_pipeline(algo, dataset, config) → results
+# ══════════════════════════════════════════════════════════════════════════════
+
+def run_pipeline(
+    algo: str = "PSO",
+    dataset: str | Path | None = None,
+    config: dict | None = None,
+) -> dict:
+    """
+    Single entry-point function.
+
+    Parameters
+    ----------
+    algo    : "PSO" or "NSGA-II"
+    dataset : Path to Excel/CSV dataset, or None for synthetic data
+    config  : dict with optional overrides (see defaults below)
+
+    Returns
+    -------
+    JSON-serialisable dict with all step results + optimisation output.
+    """
+    cfg = {
+        "seed":          42,
+        # Sizing for exploratory steps
+        "pv_kWp":        500.0,
+        "wind_kW":       200.0,
+        "battery_kWh":   20_000.0,
+        "h2_kWh":        300_000.0,
+        # PSO settings
+        "pso_n_pop":     30,
+        "pso_max_it":    40,
+        "pso_w":         0.7,
+        "pso_c1":        1.5,
+        "pso_c2":        1.5,
+        # NSGA-II settings
+        "nsga2_n_pop":   40,
+        "nsga2_max_gen": 30,
+        # Constraints
+        "lpsp_tol":      0.001,
+    }
+    if config:
+        cfg.update(config)
+
+    results = {"algorithm": algo, "config": cfg, "steps": {}}
+    t_start = time.perf_counter()
+
+    logger.info("═══ MPBSI Pipeline START — algo=%s ═══", algo)
+
+    # ─── STEP 1: Load data ───
+    if dataset is not None:
+        base = step1_load_data(dataset)
+    else:
+        base = step1_generate_synthetic(N=8760, seed=cfg["seed"])
+    results["steps"]["step1_load"] = base.to_dict()
+
+    # ─── STEP 2: Solar model ───
+    solar = step2_solar_model(base, pv_capacity_kWp=cfg["pv_kWp"])
+    results["steps"]["step2_solar"] = {
+        "pv_capacity_kWp": cfg["pv_kWp"],
+        "annual_solar_MWh": solar.annual_solar_MWh,
+    }
+
+    # ─── STEP 3: Wind model ───
+    wind = step3_wind_model(base, wind_capacity_kW=cfg["wind_kW"])
+    results["steps"]["step3_wind"] = {
+        "wind_capacity_kW": cfg["wind_kW"],
+        "annual_wind_MWh": wind.annual_wind_MWh,
+    }
+
+    # ─── STEP 4: Hybrid generation ───
+    hybrid = step4_hybrid_generation(solar, wind)
+    results["steps"]["step4_hybrid"] = {
+        "annual_hybrid_MWh": hybrid.annual_hybrid_MWh,
+    }
+
+    # ─── STEP 5: Priority battery dispatch ───
+    bat_disp = step5_priority_battery(base, hybrid, battery_cap_kWh=cfg["battery_kWh"])
+    results["steps"]["step5_battery_dispatch"] = {
+        "battery_cap_kWh": bat_disp.battery_cap_kWh,
+        "lpsp_critical": bat_disp.lpsp_critical,
+        "curtailed_semi_MWh": bat_disp.curtailed_semi_MWh,
+        "curtailed_non_MWh": bat_disp.curtailed_non_MWh,
+    }
+
+    # ─── STEP 6: Seasonal analysis ───
+    seasonal = step6_seasonal_analysis(base, hybrid)
+    results["steps"]["step6_seasonal"] = {
+        "required_storage_MWh": seasonal.required_storage_MWh,
+    }
+
+    # ─── STEP 7: Battery + H2 dispatch ───
+    h2_disp = step7_priority_h2(base, hybrid,
+                                 battery_cap_kWh=cfg["battery_kWh"],
+                                 h2_cap_kWh=cfg["h2_kWh"])
+    results["steps"]["step7_h2_dispatch"] = {
+        "battery_cap_kWh": h2_disp.battery_cap_kWh,
+        "h2_cap_kWh": h2_disp.h2_cap_kWh,
+        "lpsp_critical": h2_disp.lpsp_critical,
+        "curtailed_semi_MWh": h2_disp.curtailed_semi_MWh,
+        "curtailed_non_MWh": h2_disp.curtailed_non_MWh,
+        "raw_critical_deficit_MWh": h2_disp.raw_critical_deficit_MWh,
+    }
+
+    # ─── STEP 8: Deficit window ───
+    deficit = step8_deficit_window(base, hybrid)
+    results["steps"]["step8_deficit_window"] = {
+        "max_hours": deficit.max_consecutive_hours,
+        "max_days": deficit.max_consecutive_days,
+        "max_energy_MWh": deficit.max_consecutive_energy_MWh,
+    }
+
+    # ─── STEP 9: Survivability sizing ───
+    surv_size = step9_survivability_sizing(base)
+    results["steps"]["step9_survivability_sizing"] = {
+        "critical_daily_energy_kWh": surv_size.critical_daily_energy_kWh,
+        "h2_baseline_15d_kWh": surv_size.h2_baseline_kWh,
+        "h2_stress_30d_kWh": surv_size.h2_stress_kWh,
+    }
+
+    # ─── STEP 10: Survivability dispatch test ───
+    surv_disp = step10_survivability_dispatch(
+        base, hybrid,
+        battery_cap_kWh=cfg["battery_kWh"],
+        h2_cap_kWh=surv_size.h2_baseline_kWh,
+    )
+    results["steps"]["step10_survivability_dispatch"] = {
+        "battery_cap_kWh": surv_disp.battery_cap_kWh,
+        "h2_cap_kWh": surv_disp.h2_cap_kWh,
+        "lpsp_critical": surv_disp.lpsp_critical,
+        "curtailed_semi_MWh": surv_disp.curtailed_semi_MWh,
+        "curtailed_non_MWh": surv_disp.curtailed_non_MWh,
+    }
+
+    # ─── STEP 12: Optimization ───
+    # Build var_min / var_max from config bounds (passed from HTML UI or Streamlit)
+    _b = cfg.get("bounds", {})
+    if _b:
+        var_min = np.array([
+            float(_b.get("pv_min",   VAR_BOUNDS["min"][0])),
+            float(_b.get("wind_min", VAR_BOUNDS["min"][1])),
+            float(_b.get("batt_min", VAR_BOUNDS["min"][2])),
+            float(_b.get("elec_min", VAR_BOUNDS["min"][3])),
+            float(_b.get("h2_min",   VAR_BOUNDS["min"][4])),
+            float(_b.get("fc_min",   VAR_BOUNDS["min"][5])),
+        ], dtype=float)
+        var_max = np.array([
+            float(_b.get("pv_max",   VAR_BOUNDS["max"][0])),
+            float(_b.get("wind_max", VAR_BOUNDS["max"][1])),
+            float(_b.get("batt_max", VAR_BOUNDS["max"][2])),
+            float(_b.get("elec_max", VAR_BOUNDS["max"][3])),
+            float(_b.get("h2_max",   VAR_BOUNDS["max"][4])),
+            float(_b.get("fc_max",   VAR_BOUNDS["max"][5])),
+        ], dtype=float)
+    else:
+        var_min = VAR_BOUNDS["min"].copy()
+        var_max = VAR_BOUNDS["max"].copy()
+
+    logger.info("Optimization bounds: min=%s max=%s", var_min.tolist(), var_max.tolist())
+
+    algo_lower = algo.strip().upper()
+    if algo_lower == "PSO":
+        opt_result = pso_optimize(
+            base,
+            n_pop=cfg["pso_n_pop"],
+            max_it=cfg["pso_max_it"],
+            w=cfg["pso_w"],
+            c1=cfg["pso_c1"],
+            c2=cfg["pso_c2"],
+            seed=cfg["seed"],
+            var_min=var_min,
+            var_max=var_max,
+        )
+    elif algo_lower in ("NSGA-II", "NSGA2", "NSGA_II"):
+        opt_result = nsga2_optimize(
+            base,
+            n_pop=cfg["nsga2_n_pop"],
+            max_gen=cfg["nsga2_max_gen"],
+            seed=cfg["seed"],
+            var_min=var_min,
+            var_max=var_max,
+        )
+    else:
+        raise ValueError(f"Unknown algorithm: {algo}. Choose 'PSO' or 'NSGA-II'.")
+
+    results["optimization"] = json.loads(opt_result.to_json())
+    results["total_runtime_seconds"] = round(time.perf_counter() - t_start, 2)
+
+    logger.info("═══ MPBSI Pipeline DONE | Total: %.1f s ═══",
+                results["total_runtime_seconds"])
+    return results
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  STREAMLIT BRIDGE  —  Connects Python backend to HTML UI
+# ══════════════════════════════════════════════════════════════════════════════
+
+def get_streamlit_bridge() -> str:
+    """
+    Returns JavaScript injection code to bridge Streamlit ↔ HTML UI events.
+    Inject this into the HTML via Streamlit's components API.
+    """
+    return """
+<script>
+// MPBSI Streamlit Bridge
+window.runMPBSI = function(algo, config) {
+    // Send message to Streamlit backend
+    window.parent.postMessage({
+        type: 'streamlit:setComponentValue',
+        value: { action: 'run_pipeline', algo: algo, config: config }
+    }, '*');
+};
+
+// Listen for results from Streamlit
+window.addEventListener('message', function(event) {
+    if (event.data && event.data.type === 'mpbsi_results') {
+        window.displayResults(event.data.results);
+    }
+});
+</script>
+"""
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  QUICK-TEST ENTRY POINT
+# ══════════════════════════════════════════════════════════════════════════════
+
+if __name__ == "__main__":
+    import sys
+
+    algo = sys.argv[1] if len(sys.argv) > 1 else "PSO"
+    print(f"\n{'═'*60}")
+    print(f"  MPBSI Framework — Running {algo} optimization")
+    print(f"{'═'*60}\n")
+
+    results = run_pipeline(
+        algo=algo,
+        dataset=None,       # Use synthetic data
+        config={
+            "seed": 42,
+            "pso_n_pop": 10,    # Reduced for quick test
+            "pso_max_it": 5,
+            "nsga2_n_pop": 10,
+            "nsga2_max_gen": 5,
+        }
+    )
+
+    print("\n" + "═"*60)
+    print("  RESULTS SUMMARY")
+    print("═"*60)
+    print(f"  Algorithm     : {results['algorithm']}")
+    print(f"  Best MPBSI    : {results['optimization']['best_mpbsi']:.4f}")
+    print(f"  Feasible      : {results['optimization']['feasible']}")
+    print(f"  Runtime       : {results['total_runtime_seconds']:.1f}s")
+    print("\n  Pillars:")
+    for k, v in results['optimization']['best_pillars'].items():
+        print(f"    {k:6s} = {v:.4f}")
+    print("\n  Optimal Design:")
+    for name, val in zip(VAR_NAMES, results['optimization']['best_x']):
+        print(f"    {name:20s} = {val:.2f}")
+    print("═"*60)
