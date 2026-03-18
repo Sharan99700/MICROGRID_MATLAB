@@ -693,7 +693,7 @@
                             Military doctrine · Hard 7-day autonomy · LPSP ≤ 1e-4 · REN ≥ 99.9%
                         </div>
                         <div style="margin-top:8px;font-size:0.72em;color:#a78bfa;font-family:var(--mono);">
-                            ESI 30% · EcSI 25% · TRI 15% · ORI 15% · LSI 15%
+                            <span id="tile_w_esi_m">ESI 15%</span> · <span id="tile_w_ecsi_m">EcSI 25%</span> · <span id="tile_w_tri_m">TRI 30%</span> · <span id="tile_w_ori_m">ORI 15%</span> · <span id="tile_w_lsi_m">LSI 15%</span>
                         </div>
                     </label>
                     <!-- Resource -->
@@ -709,11 +709,35 @@
                             Grid-tied / peacetime · No hard autonomy · 100% renewable · Hub-height wind
                         </div>
                         <div style="margin-top:8px;font-size:0.72em;color:#38ef7d;font-family:var(--mono);">
-                            ESI 5% · EcSI 20% · TRI 30% · ORI 25% · LSI 20%
+                            <span id="tile_w_esi_r">ESI 5%</span> · <span id="tile_w_ecsi_r">EcSI 20%</span> · <span id="tile_w_tri_r">TRI 30%</span> · <span id="tile_w_ori_r">ORI 25%</span> · <span id="tile_w_lsi_r">LSI 20%</span>
                         </div>
                     </label>
                 </div>
                 <input type="hidden" id="selected_mode" value="mission">
+            </div>
+
+            <!-- ── Dataset Status Bar (populated after upload) ── -->
+            <div id="dataset_status_bar" class="card full-width" style="padding:14px 20px; display:none;">
+                <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+                    <div style="font-size:0.78em; font-weight:700; color:#38ef7d; letter-spacing:1px;">
+                        ✅ DATASET LOADED
+                    </div>
+                    <div style="display:flex; gap:20px; flex-wrap:wrap; font-family:var(--mono); font-size:0.8em;">
+                        <span style="color:#FFD700;">☀️ Avg GHI: <strong id="calc_avg_solar">—</strong> kW/m²</span>
+                        <span style="color:#00BFFF;">🌬️ Avg Wind: <strong id="calc_avg_wind">—</strong> m/s</span>
+                        <span style="color:#FF6347;">⚡ Peak Load: <strong id="calc_peak_load">—</strong> kW
+                            <span id="calc_peak_load_2" style="display:none;"></span>
+                        </span>
+                        <span style="color:#32CD32;">📊 Avg Load: <strong id="calc_avg_load">—</strong> kW
+                            <span id="calc_avg_load_2" style="display:none;"></span>
+                        </span>
+                        <span style="color:#a78bfa;">📅 Annual: <strong id="calc_annual">—</strong> MWh/yr</span>
+                    </div>
+                </div>
+                <!-- Hidden inputs used by legacy code and PSO bounds hints -->
+                <input type="hidden" id="peak_load_input">
+                <input type="hidden" id="avg_load_input">
+                <input type="hidden" id="annual_demand">
             </div>
 
             <div class="card">
@@ -728,26 +752,26 @@
                     <div class="input-row" style="margin-top: 15px;">
                         <div class="input-group">
                             <label id="lbl_tri">TRI: Tactical Resilience (w=0.30)</label>
-                            <input type="number" id="w_tri" value="0.30" min="0" max="1" step="0.01" onchange="updateWeightSum()">
+                            <input type="number" id="w_tri" value="0.30" min="0" max="1" step="0.01" onchange="updateWeightSum(); updateWeightTiles();">
                         </div>
                         <div class="input-group">
                             <label id="lbl_ecsi">EcSI: Economic Sustainability (w=0.25)</label>
-                            <input type="number" id="w_ecsi" value="0.25" min="0" max="1" step="0.01" onchange="updateWeightSum()">
+                            <input type="number" id="w_ecsi" value="0.25" min="0" max="1" step="0.01" onchange="updateWeightSum(); updateWeightTiles();">
                         </div>
                     </div>
                     <div class="input-row">
                         <div class="input-group">
                             <label id="lbl_ori">ORI: Operational Reliability (w=0.15)</label>
-                            <input type="number" id="w_ori" value="0.15" min="0" max="1" step="0.01" onchange="updateWeightSum()">
+                            <input type="number" id="w_ori" value="0.15" min="0" max="1" step="0.01" onchange="updateWeightSum(); updateWeightTiles();">
                         </div>
                         <div class="input-group">
                             <label id="lbl_lsi">LSI: Logistics Support (w=0.15)</label>
-                            <input type="number" id="w_lsi" value="0.15" min="0" max="1" step="0.01" onchange="updateWeightSum()">
+                            <input type="number" id="w_lsi" value="0.15" min="0" max="1" step="0.01" onchange="updateWeightSum(); updateWeightTiles();">
                         </div>
                     </div>
                     <div class="input-group">
                         <label id="lbl_esi">ESI: Energy Security (w=0.15)</label>
-                        <input type="number" id="w_esi" value="0.15" min="0" max="1" step="0.01" onchange="updateWeightSum()">
+                        <input type="number" id="w_esi" value="0.15" min="0" max="1" step="0.01" onchange="updateWeightSum(); updateWeightTiles();">
                     </div>
                     <p id="weight_sum" style="margin-top: 15px; font-weight: bold;"></p>
                 </div>
@@ -1450,7 +1474,8 @@
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             const tabLabels = {
                 initial_sizing: 'Summary', optimize: 'Optimise', running: 'Running',
-                results: 'Results', steps_detail: '10-Step', graphs: 'Graphs', pillars: 'Pillars'
+                results: 'Results', steps_detail: '10-Step', graphs: 'Graphs',
+                pillars: 'Pillars', costs_report: 'Costs'
             };
             const targetLabel = tabLabels[tabName] || tabName;
             document.querySelectorAll('.tab').forEach(tab => {
@@ -1511,8 +1536,8 @@
 
         // ── Mode selector ─────────────────────────────────────────────────────
         const MODE_WEIGHTS = {
-            mission:  { ESI: 0.30, EcSI: 0.25, TRI: 0.15, ORI: 0.15, LSI: 0.15 },
-            resource: { ESI: 0.05, EcSI: 0.20, TRI: 0.30, ORI: 0.25, LSI: 0.20 },
+            mission:  { ESI: 0.15, EcSI: 0.25, TRI: 0.30, ORI: 0.15, LSI: 0.15 },  // MATLAB PSO_MPBSI_Mission
+            resource: { ESI: 0.05, EcSI: 0.20, TRI: 0.30, ORI: 0.25, LSI: 0.20 },  // MATLAB PSO_MPBSI_Resource
         };
         const MODE_LABELS = {
             mission:  { TRI: 'TRI: Tactical Resilience', EcSI: 'EcSI: Economic Sustainability',
@@ -1562,18 +1587,71 @@
                 if (lblEl && lbl[k]) lblEl.textContent = lbl[k] + ' (w=' + w[k].toFixed(2) + ')';
             });
             updateWeightSum();
+            updateWeightTiles();
+        }
+
+        // ── Live weight tile sync ──────────────────────────────────────────
+        function updateWeightTiles() {
+            const w = {
+                esi:  parseFloat(document.getElementById('w_esi')?.value)  || 0,
+                ecsi: parseFloat(document.getElementById('w_ecsi')?.value) || 0,
+                tri:  parseFloat(document.getElementById('w_tri')?.value)  || 0,
+                ori:  parseFloat(document.getElementById('w_ori')?.value)  || 0,
+                lsi:  parseFloat(document.getElementById('w_lsi')?.value)  || 0,
+            };
+            const fmt = v => (v * 100).toFixed(0) + '%';
+            const sum  = (w.esi + w.ecsi + w.tri + w.ori + w.lsi);
+            const ok   = Math.abs(sum - 1.0) < 0.02;
+
+            // Update both tiles (mission and resource show same current weights)
+            ['m', 'r'].forEach(mode => {
+                const set = (id, val) => {
+                    const el = document.getElementById(id + '_' + mode);
+                    if (el) el.textContent = val;
+                };
+                set('tile_w_esi',  'ESI '  + fmt(w.esi));
+                set('tile_w_ecsi', 'EcSI ' + fmt(w.ecsi));
+                set('tile_w_tri',  'TRI '  + fmt(w.tri));
+                set('tile_w_ori',  'ORI '  + fmt(w.ori));
+                set('tile_w_lsi',  'LSI '  + fmt(w.lsi));
+            });
+
+            // Colour the weight sum indicator
+            const sumEl = document.getElementById('weight_sum');
+            if (sumEl) {
+                const pct = (sum * 100).toFixed(0);
+                sumEl.innerHTML = ok
+                    ? `<span style="color:#38ef7d;">✓ Weights sum = ${pct}%</span>`
+                    : `<span style="color:#ff6b6b;">⚠ Weights sum = ${pct}% (must be 100%)</span>`;
+            }
+
+            // Highlight changed tiles vs mode default
+            const mode = document.getElementById('selected_mode')?.value || 'mission';
+            const defaults = MODE_WEIGHTS[mode];
+            ['esi','ecsi','tri','ori','lsi'].forEach(k => {
+                const changed = Math.abs(w[k] - defaults[k]) > 0.005;
+                ['m','r'].forEach(suffix => {
+                    const el = document.getElementById('tile_w_' + k + '_' + suffix);
+                    if (el) el.style.fontWeight = changed ? '900' : 'normal';
+                });
+            });
         }
 
         function autoOptimizeWeights() {
-            // MATLAB defaults: TRI=0.30, EcSI=0.25, ORI=0.15, LSI=0.15, ESI=0.15
-            const weights = { TRI: 0.30, EcSI: 0.25, ORI: 0.15, LSI: 0.15, ESI: 0.15 };
+            // Use MATLAB defaults for the currently selected mode
+            const mode = document.getElementById('selected_mode')?.value || 'mission';
+            const weights = MODE_WEIGHTS[mode] || MODE_WEIGHTS.mission;
             const fields = { TRI:'w_tri', ORI:'w_ori', LSI:'w_lsi', ESI:'w_esi', EcSI:'w_ecsi' };
             Object.entries(fields).forEach(([k, id]) => {
                 const el = document.getElementById(id);
-                if (el) el.value = weights[k].toFixed(2);
+                if (el) { el.value = weights[k].toFixed(2); el.dispatchEvent(new Event('change')); }
             });
             updateWeightSum();
-            alert('✅ Weights restored to MATLAB defaults:\n\nTRI:30% | EcSI:25% | ORI:15% | LSI:15% | ESI:15%\n\nSum = 1.00 ✓');
+            updateWeightTiles();
+            const modeLabel = mode.charAt(0).toUpperCase() + mode.slice(1);
+            alert(`✅ Weights reset to MATLAB ${modeLabel} defaults:\n\n` +
+                  `ESI:${(weights.ESI*100).toFixed(0)}% | EcSI:${(weights.EcSI*100).toFixed(0)}% | ` +
+                  `TRI:${(weights.TRI*100).toFixed(0)}% | ORI:${(weights.ORI*100).toFixed(0)}% | LSI:${(weights.LSI*100).toFixed(0)}%`);
         }
 
         // ══════════════════════════════════════════════════════════════════
@@ -1838,6 +1916,10 @@
                     }
                 } catch(e){ console.warn('Monthly chart error:', e); }
 
+                // ── Show dataset status bar in Optimize tab ──
+                const dsBar = document.getElementById('dataset_status_bar');
+                if (dsBar) dsBar.style.display = 'block';
+
                 // ── Show summary content, hide empty state ──
                 document.getElementById('summary_empty_state').style.display = 'none';
                 document.getElementById('summary_content').style.display = 'block';
@@ -1995,12 +2077,12 @@
                 h2_max:    parseFloat(document.getElementById('h2_max')?.value)    || 80000,
                 fc_min:    parseFloat(document.getElementById('fc_min')?.value)    || 100,
                 fc_max:    parseFloat(document.getElementById('fc_max')?.value)    || 600,
-                // MPBSI weights
-                w_tri:  parseFloat(document.getElementById('w_tri')?.value)  || 0.30,
-                w_ori:  parseFloat(document.getElementById('w_ori')?.value)  || 0.25,
-                w_lsi:  parseFloat(document.getElementById('w_lsi')?.value)  || 0.20,
-                w_esi:  parseFloat(document.getElementById('w_esi')?.value)  || 0.15,
-                w_ecsi: parseFloat(document.getElementById('w_ecsi')?.value) || 0.10,
+                // MPBSI weights — read from sliders (set by setMode or user edit)
+                w_tri:  parseFloat(document.getElementById('w_tri')?.value)  ?? 0.30,
+                w_ori:  parseFloat(document.getElementById('w_ori')?.value)  ?? 0.15,
+                w_lsi:  parseFloat(document.getElementById('w_lsi')?.value)  ?? 0.15,
+                w_esi:  parseFloat(document.getElementById('w_esi')?.value)  ?? 0.15,
+                w_ecsi: parseFloat(document.getElementById('w_ecsi')?.value) ?? 0.25,
                 // Costs
                 cost_pv:      parseFloat(document.getElementById('cost_pv')?.value)      || 55000,
                 cost_wind:    parseFloat(document.getElementById('cost_wind')?.value)    || 120000,
@@ -2097,21 +2179,6 @@
             const s3    = steps.step3_wind             || {};
             const s4    = steps.step4_hybrid           || {};
 
-            // ── Autonomy Days Calculation ──
-            // Autonomy = total storage (Battery + H₂) / critical daily energy demand
-            // Critical fraction = 60% of total load (matching MATLAB Step 9)
-            const CRITICAL_FRAC = 0.60;
-            const battKWh = Array.isArray(bestX) ? (parseFloat(bestX[2]) || 0) : 0;
-            const h2KWh   = Array.isArray(bestX) ? (parseFloat(bestX[4]) || 0) : 0;
-            const totalStorageKWh = battKWh + h2KWh;
-            // Use critical_daily_energy_kWh from step9 if available, else estimate from annual load
-            let criticalDailyKWh = step9.critical_daily_energy_kWh || 0;
-            if (!criticalDailyKWh && rel.annual_load_MWh) {
-                criticalDailyKWh = (rel.annual_load_MWh * 1000 / 365) * CRITICAL_FRAC;
-            }
-            const autonomyDays = criticalDailyKWh > 0 ? (totalStorageKWh / criticalDailyKWh) : 0;
-            const autoBadgeColor = autonomyDays >= MIN_AUTO ? '#38ef7d' : autonomyDays >= MIN_AUTO * 0.7 ? '#FFD700' : '#ff6b6b';
-
             optimizationResults = results;
 
             // ── Build results HTML ──
@@ -2145,14 +2212,6 @@
             const totalCurt   = curtSemi + curtNon;
             // Net delivered = gross RES minus what was curtailed (couldn't be used or stored)
             const netDelivered = Math.max(grossRES - totalCurt, 0);
-            // Round-trip storage losses: battery portion and H2 portion of charge throughput
-            const rtLossFrac  = 1 - (eta_ch * eta_dis);          // ~9.75% battery RT loss
-            const h2LossFrac  = 1 - (eta_EL * eta_FC);           // ~61.5% H2 RT loss
-            // Effective autonomy accounts for round-trip discharge efficiency
-            const battEffKWh  = battKWh * eta_dis;                // usable from battery
-            const h2EffKWh    = h2KWh   * eta_FC;                 // usable from H2
-            const effAutoDays = criticalDailyKWh > 0 ? (battEffKWh + h2EffKWh) / criticalDailyKWh : 0;
-            const effBadgeColor = effAutoDays >= MIN_AUTO ? '#38ef7d' : effAutoDays >= MIN_AUTO*0.7 ? '#FFD700' : '#ff6b6b';
             // Self-sufficiency ratio
             const selfSuff    = annualLoad > 0 ? Math.min(netDelivered / annualLoad * 100, 100) : 0;
             // System efficiency (net energy actually delivered / gross generated)
@@ -2160,11 +2219,46 @@
             // RES surplus ratio
             const resSurplus  = annualLoad > 0 ? ((grossRES / annualLoad - 1) * 100) : 0;
 
+            // ── Autonomy: backend is single source of truth (MATLAB-exact formula) ──
+            // MATLAB: autonomy = (usable_batt + E_H2_max×η_FC) / critical_daily
+            //         usable_batt   = (SOC_max - SOC_min) = 0.6 × E_BESS
+            //         critical_daily = Σ(0.6×Load) / 365
+            const battKWh   = Array.isArray(bestX) ? (parseFloat(bestX[2]) || 0) : 0;
+            const h2KWh     = Array.isArray(bestX) ? (parseFloat(bestX[4]) || 0) : 0;
+
+            // Usable energy for display breakdown (MATLAB formula components)
+            // MATLAB: usable_battery = SOC_max - SOC_min = E_BESS×1.0 - E_BESS×0.2 = 0.8×E_BESS
+            const battEffKWh = (1.0 - 0.2) * battKWh;               // SOC_max - SOC_min = 0.8×BESS
+            const h2EffKWh   = h2KWh * eta_FC;                       // E_H2_max × η_FC
+
+            // Critical daily load for display
+            let criticalDailyKWh = step9.critical_daily_energy_kWh || 0;
+            if (!criticalDailyKWh && annualLoad > 0) {
+                criticalDailyKWh = (annualLoad * 1000 / 365) * 0.60;
+            }
+
+            // autonomy_days from backend = MATLAB-exact (always use this)
+            const autonomyDays  = typeof rel.autonomy_days === 'number'
+                ? rel.autonomy_days
+                : (criticalDailyKWh > 0 ? (battEffKWh + h2EffKWh) / criticalDailyKWh : 0);
+            const effAutoDays   = autonomyDays;   // same value — backend already is MATLAB formula
+            const autoBadgeColor = autonomyDays >= MIN_AUTO ? '#38ef7d'
+                                 : autonomyDays >= MIN_AUTO * 0.7 ? '#FFD700' : '#ff6b6b';
+            const effBadgeColor  = autoBadgeColor;
+
             const html = `
                 <div class="card full-width">
                     <h2>🏆 ${algo} Optimization Results ${modeBadgeHtml}</h2>
                     <div class="${isFeasible ? 'status-badge status-feasible' : 'status-badge status-infeasible'}">
                         ${isFeasible ? '✓ FEASIBLE SOLUTION FOUND' : '✗ NO FEASIBLE SOLUTION IN SEARCH SPACE'}
+                    </div>
+                    <div style="margin-top:10px; font-size:0.75em; color:#8b9dc3; font-family:var(--mono);">
+                        ⚖️ Weights used in PSO:&nbsp;
+                        ESI <strong style="color:#38ef7d;">${((results.weights_used?.w_esi??0.15)*100).toFixed(0)}%</strong> ·
+                        EcSI <strong style="color:#FFD700;">${((results.weights_used?.w_ecsi??0.25)*100).toFixed(0)}%</strong> ·
+                        TRI <strong style="color:#667eea;">${((results.weights_used?.w_tri??0.30)*100).toFixed(0)}%</strong> ·
+                        ORI <strong style="color:#00BFFF;">${((results.weights_used?.w_ori??0.15)*100).toFixed(0)}%</strong> ·
+                        LSI <strong style="color:#ff9f43;">${((results.weights_used?.w_lsi??0.15)*100).toFixed(0)}%</strong>
                     </div>
                 </div>
 
@@ -2240,12 +2334,12 @@
                             <div class="label">η_EL=${(eta_EL*100).toFixed(0)}% × η_FC=${(eta_FC*100).toFixed(0)}%</div>
                         </div>
                         <div class="metric-card" style="border:2px solid ${effBadgeColor}; background:rgba(0,0,0,0.2);">
-                            <div class="label">⏳ Effective Autonomy</div>
+                            <div class="label">⏳ Autonomy</div>
                             <div class="value" style="font-size:2em; color:${effBadgeColor}; font-weight:bold;">${effAutoDays.toFixed(1)}</div>
-                            <div class="label" style="color:${effBadgeColor};">days (after η losses)</div>
+                            <div class="label" style="color:${effBadgeColor};">days (MATLAB theoretical)</div>
                             <div style="margin-top:8px; font-size:0.78em; color:#a0a8d4;">
-                                🔋 Usable batt: ${battEffKWh.toFixed(0)} kWh (×${eta_dis})<br>
-                                🔵 Usable H₂: ${h2EffKWh.toFixed(0)} kWh (×${eta_FC})<br>
+                                🔋 Usable batt: ${battEffKWh.toFixed(0)} kWh (0.6×BESS)<br>
+                                🔵 Usable H₂: ${h2EffKWh.toFixed(0)} kWh (×η_FC ${(eta_FC*100).toFixed(0)}%)<br>
                                 ⚡ Critical load: ${criticalDailyKWh.toFixed(0)} kWh/day
                             </div>
                         </div>
@@ -2260,13 +2354,13 @@
                                 ${effAutoDays >= MIN_AUTO ? '✅ Autonomy Requirement MET' : '⚠️ Autonomy Requirement NOT MET'}
                             </strong>
                         </p>
-                        <p style="margin-top:10px;">After applying round-trip efficiency losses, the system can deliver stored energy for <strong style="color:${effBadgeColor}; font-size:1.2em;">${effAutoDays.toFixed(2)} effective days</strong> without renewable generation. <span style="color:#8b9dc3;">(Nominal: ${autonomyDays.toFixed(1)} days before losses)</span></p>
+                        <p style="margin-top:10px;">The system can sustain critical loads from stored energy alone for <strong style="color:${effBadgeColor}; font-size:1.2em;">${effAutoDays.toFixed(2)} days</strong>. This is the MATLAB theoretical value: (Usable Battery + H₂×η_FC) ÷ Critical Daily Load.</p>
                         <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:15px; margin-top:15px;">
                             <div style="text-align:center; padding:12px; background:rgba(102,126,234,0.15); border-radius:10px;">
                                 <div style="color:#8b9dc3; font-size:0.85em;">🔋 Battery (Nominal)</div>
                                 <div style="color:#667eea; font-size:1.4em; font-weight:bold;">${battKWh.toFixed(0)} kWh</div>
                                 <div style="color:#38ef7d; font-size:0.9em; font-weight:600;">→ ${battEffKWh.toFixed(0)} kWh usable</div>
-                                <div style="color:#8b9dc3; font-size:0.78em;">×η_dis ${(eta_dis*100).toFixed(0)}% | ${criticalDailyKWh > 0 ? (battEffKWh/criticalDailyKWh).toFixed(1) : '—'} eff. days</div>
+                                <div style="color:#8b9dc3; font-size:0.78em;">0.6×BESS (SOC_max−SOC_min)</div>
                             </div>
                             <div style="text-align:center; padding:12px; background:rgba(56,239,125,0.1); border-radius:10px;">
                                 <div style="color:#8b9dc3; font-size:0.85em;">🔵 H₂ Storage (Nominal)</div>
@@ -2280,13 +2374,13 @@
                                 <div style="color:#8b9dc3; font-size:0.8em;">60% of avg daily demand</div>
                             </div>
                             <div style="text-align:center; padding:12px; background:rgba(${effAutoDays >= MIN_AUTO ? '56,239,125' : '255,107,107'},0.1); border-radius:10px;">
-                                <div style="color:#8b9dc3; font-size:0.85em;">🎯 Effective Autonomy</div>
+                                <div style="color:#8b9dc3; font-size:0.85em;">🎯 Autonomy (MATLAB)</div>
                                 <div style="color:${effBadgeColor}; font-size:1.5em; font-weight:bold;">${effAutoDays.toFixed(1)} days</div>
-                                <div style="color:#8b9dc3; font-size:0.78em;">Nominal: ${autonomyDays.toFixed(1)}d | Min: ${MIN_AUTO}d</div>
+                                <div style="color:#8b9dc3; font-size:0.78em;">= (BattEff + H₂Eff) ÷ CritDaily</div>
                             </div>
                         </div>
                         <p style="margin-top:12px; font-size:0.85em; color:#a0a8d4;">
-                            <em>Effective Autonomy = (Battery×η_dis + H₂×η_FC) ÷ Critical Daily Load &nbsp;|&nbsp; Battery RT η=${((eta_ch*eta_dis)*100).toFixed(1)}% &nbsp;|&nbsp; H₂ RT η=${((eta_EL*eta_FC)*100).toFixed(1)}%</em>
+                            <em>Autonomy (MATLAB) = (0.6×BESS + E_H2×η_FC) ÷ (0.6×Annual_Load/365) &nbsp;|&nbsp; Battery RT η=${((eta_ch*eta_dis)*100).toFixed(1)}% &nbsp;|&nbsp; H₂ RT η=${((eta_EL*eta_FC)*100).toFixed(1)}%</em>
                         </p>
                     </div>
                 </div>
@@ -2661,13 +2755,13 @@
             ], { ...dark, xaxis:{...axis,title:'Category'}, yaxis:{...axis,title:'MWh/year'} },
             {responsive:true,displayModeBar:false});
 
-            // 6. Pillar contribution pie
-            // Use current weights from UI inputs (MATLAB defaults: TRI=0.30, EcSI=0.25, ORI=0.15, LSI=0.15, ESI=0.15)
-            const w = { TRI: parseFloat(document.getElementById('w_tri')?.value)||0.30,
-                        EcSI: parseFloat(document.getElementById('w_ecsi')?.value)||0.25,
-                        ORI: parseFloat(document.getElementById('w_ori')?.value)||0.15,
-                        LSI: parseFloat(document.getElementById('w_lsi')?.value)||0.15,
-                        ESI: parseFloat(document.getElementById('w_esi')?.value)||0.15 };
+            // 6. Pillar contribution pie — use backend weights_used (actual weights PSO ran with)
+            const wUsed = results.weights_used || {};
+            const w = { TRI:  wUsed.w_tri  ?? parseFloat(document.getElementById('w_tri')?.value)  ?? 0.30,
+                        EcSI: wUsed.w_ecsi ?? parseFloat(document.getElementById('w_ecsi')?.value) ?? 0.25,
+                        ORI:  wUsed.w_ori  ?? parseFloat(document.getElementById('w_ori')?.value)  ?? 0.15,
+                        LSI:  wUsed.w_lsi  ?? parseFloat(document.getElementById('w_lsi')?.value)  ?? 0.15,
+                        ESI:  wUsed.w_esi  ?? parseFloat(document.getElementById('w_esi')?.value)  ?? 0.15 };
             Plotly.newPlot('g_pie', [{
                 labels: pKeys,
                 values: pKeys.map(k => ((pillars[k]||0) * (w[k]||0.1) * 100)),
@@ -3229,44 +3323,79 @@
                 const arr = new Uint8Array(byteStr.length);
                 for(let i=0;i<byteStr.length;i++) arr[i] = byteStr.charCodeAt(i);
                 const blob = new Blob([arr], {
-                    type: ext === 'csv'
-                        ? 'text/csv'
+                    type: ext === 'csv' ? 'text/csv'
                         : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
                 });
                 const file = new File([blob], filename, {type: blob.type});
 
-                // ── Inject into file input so the native uploader also shows the file ──
+                // Inject into file input so native uploader shows the file
                 const dt = new DataTransfer();
                 dt.items.add(file);
                 const fileInput = document.getElementById('file_input');
-                if(fileInput) {
-                    fileInput.files = dt.files;
-                    onFileSelected(fileInput);
-                }
+                if(fileInput) { fileInput.files = dt.files; onFileSelected(fileInput); }
 
-                // ── Parse and process directly ──
+                // Show loading indicator while parsing
+                showLoading('\uD83D\uDCC2 Parsing ' + filename + '...', 'Reading rows · Computing statistics');
+
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     try {
                         let rows;
                         if(ext === 'csv'){
-                            const parsed = Papa.parse(e.target.result, {header:true, dynamicTyping:true, skipEmptyLines:true});
+                            const parsed = Papa.parse(e.target.result,
+                                {header:true, dynamicTyping:true, skipEmptyLines:true});
                             rows = parsed.data;
                         } else {
+                            if(typeof XLSX === 'undefined'){
+                                // XLSX CDN not loaded yet — retry up to 5s
+                                let attempts = 0;
+                                const waitXLSX = setInterval(() => {
+                                    attempts++;
+                                    if(typeof XLSX !== 'undefined'){
+                                        clearInterval(waitXLSX);
+                                        try {
+                                            const wb2 = XLSX.read(e.target.result, {type:'array'});
+                                            const rows2 = XLSX.utils.sheet_to_json(wb2.Sheets[wb2.SheetNames[0]]);
+                                            processUploadedRows(rows2, filename);
+                                        } catch(err2) {
+                                            hideLoading();
+                                            document.getElementById('upload_status').innerHTML =
+                                                '<p style="color:#ff6b6b;">\u274C Parse error: ' + err2.message + '</p>';
+                                        }
+                                    } else if(attempts >= 25) {
+                                        clearInterval(waitXLSX);
+                                        hideLoading();
+                                        document.getElementById('upload_status').innerHTML =
+                                            '<p style="color:#ff6b6b;">\u26A0\uFE0F XLSX library failed to load. Check connection.</p>';
+                                    }
+                                }, 200);
+                                return;
+                            }
                             const wb = XLSX.read(e.target.result, {type:'array'});
                             rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
                         }
                         processUploadedRows(rows, filename);
                     } catch(err) {
+                        hideLoading();
                         console.error('Sidebar file parse error:', err);
+                        document.getElementById('upload_status').innerHTML =
+                            '<p style="color:#ff6b6b;">\u274C Parse error: ' + err.message + '</p>';
                     }
+                };
+                reader.onerror = function(){
+                    hideLoading();
+                    document.getElementById('upload_status').innerHTML =
+                        '<p style="color:#ff6b6b;">\u274C File read failed. Please re-upload.</p>';
                 };
                 if(ext === 'csv') reader.readAsText(file);
                 else reader.readAsArrayBuffer(file);
 
-                console.log('✅ Sidebar file injected:', filename);
+                console.log('\u2705 Sidebar file injected:', filename);
             } catch(e) {
+                hideLoading();
                 console.error('receiveFileFromSidebar error:', e);
+                document.getElementById('upload_status').innerHTML =
+                    '<p style="color:#ff6b6b;">\u274C Upload error: ' + e.message + '</p>';
             }
         };
 
@@ -3729,7 +3858,14 @@
                 gap(6);
                 sectionBar('2.  MPBSI Pillar Scores', 80, 40, 160);
 
-                const weights = { ESI:0.15, EcSI:0.25, TRI:0.30, ORI:0.15, LSI:0.15 };
+                const _wu = (optimizationResults && optimizationResults.weights_used) || {};
+                const weights = {
+                    ESI:  _wu.w_esi  ?? 0.15,
+                    EcSI: _wu.w_ecsi ?? 0.25,
+                    TRI:  _wu.w_tri  ?? 0.30,
+                    ORI:  _wu.w_ori  ?? 0.15,
+                    LSI:  _wu.w_lsi  ?? 0.15
+                };
                 const pillarNames = {
                     ESI:'Energy Security Index', EcSI:'Economic Sustainability Index',
                     TRI:'Tactical Resilience Index', ORI:'Operational Reliability Index',
@@ -4538,5 +4674,21 @@
     </select>
     <button id="run_pso_btn">Run</button>
 </div>
+
+<script>
+// Initialise tiles with default weights on page load
+(function() {
+    function initTiles() {
+        if (typeof updateWeightTiles === 'function') {
+            updateWeightTiles();
+        } else {
+            setTimeout(initTiles, 100);
+        }
+    }
+    if (document.readyState === 'complete') { initTiles(); }
+    else { window.addEventListener('load', initTiles); }
+})();
+</script>
+
 </body>
 </html>

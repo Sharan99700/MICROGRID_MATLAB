@@ -1146,7 +1146,8 @@ def microgrid_dispatch_full(
 def mpbsi_evaluator(
     x:              np.ndarray | list,
     base:           BaseData,
-    land_available: float = 50_000.0,   # m² — 5 ha
+    land_available: float = 50_000.0,
+    weights:        Optional[dict] = None,
 ) -> MPBSIResult:
     """
     Exact translation of MPBSI_Evaluator_Mission_Land.m.
@@ -1250,7 +1251,14 @@ def mpbsi_evaluator(
     LSI = 0.4 * L1 + 0.3 * L2 + 0.3 * L3
 
     # ── 9. MPBSI ──────────────────────────────────────────────────────────────
-    MPBSI = 0.15 * ESI + 0.25 * EcSI + 0.30 * TRI + 0.15 * ORI + 0.15 * LSI
+    # ── MPBSI final score — use user weights or MATLAB defaults ──────────────
+    _w = weights or {}
+    w_esi  = float(_w.get("w_esi",  0.15))
+    w_ecsi = float(_w.get("w_ecsi", 0.25))
+    w_tri  = float(_w.get("w_tri",  0.30))
+    w_ori  = float(_w.get("w_ori",  0.15))
+    w_lsi  = float(_w.get("w_lsi",  0.15))
+    MPBSI = w_esi*ESI + w_ecsi*EcSI + w_tri*TRI + w_ori*ORI + w_lsi*LSI
 
     pillars = Pillars(ESI=round(ESI, 6), EcSI=round(EcSI, 6),
                       TRI=round(TRI, 6),  ORI=round(ORI, 6),  LSI=round(LSI, 6))
@@ -1415,6 +1423,7 @@ def mpbsi_evaluator_resource(
     x:              np.ndarray | list,
     base:           BaseData,
     land_available: float = 50_000.0,
+    weights:        Optional[dict] = None,
 ) -> MPBSIResult:
     """
     Exact translation of MPBSI_Evaluator_Resource_Land.m.
@@ -1496,7 +1505,14 @@ def mpbsi_evaluator_resource(
 
     # ── MPBSI (Resource weights) ──────────────────────────────────────────────
     # ESI:0.05  EcSI:0.20  TRI:0.30  ORI:0.25  LSI:0.20
-    MPBSI = 0.05*ESI + 0.20*EcSI + 0.30*TRI + 0.25*ORI + 0.20*LSI
+    # ── MPBSI final score — use user weights or MATLAB Resource defaults ──────
+    _w = weights or {}
+    w_esi  = float(_w.get("w_esi",  0.05))
+    w_ecsi = float(_w.get("w_ecsi", 0.20))
+    w_tri  = float(_w.get("w_tri",  0.30))
+    w_ori  = float(_w.get("w_ori",  0.25))
+    w_lsi  = float(_w.get("w_lsi",  0.20))
+    MPBSI = w_esi*ESI + w_ecsi*EcSI + w_tri*TRI + w_ori*ORI + w_lsi*LSI
 
     pillars = Pillars(ESI=round(ESI,6), EcSI=round(EcSI,6),
                       TRI=round(TRI,6), ORI=round(ORI,6), LSI=round(LSI,6))
@@ -1512,18 +1528,15 @@ def nsga_objective_mission(
     x:              np.ndarray,
     base:           BaseData,
     land_available: float = 50_000.0,
+    weights:        Optional[dict] = None,
 ) -> tuple[float, float]:
     """
     Exact translation of NSGA_Objective_Mission.m.
-
-    Returns (f1, f2):
-      f1 = −MPBSI          (minimise → maximise MPBSI)
-      f2 = NPC / 1e8       (minimise NPC)
-    Penalty: (1e3, 1e3) if infeasible.
+    Returns (f1, f2): f1 = −MPBSI, f2 = NPC/1e8. Penalty (1e3,1e3) if infeasible.
     """
     Required_Autonomy = 7.0
 
-    res = mpbsi_evaluator(x, base, land_available)
+    res = mpbsi_evaluator(x, base, land_available, weights=weights)
     if res.mpbsi < 0:
         return (1e3, 1e3)
 
@@ -1711,7 +1724,8 @@ def pso_optimize(
     var_min:           Optional[np.ndarray] = None,
     var_max:           Optional[np.ndarray] = None,
     progress_callback: Optional[Callable]   = None,
-    mode:              str   = "mission",   # "mission" or "resource"
+    mode:              str   = "mission",
+    weights:           Optional[dict]       = None,
 ) -> OptimizationResult:
     """
     Exact translation of PSO_MPBSI_Mission_LandConstrained.m.
@@ -1758,9 +1772,9 @@ def pso_optimize(
 
     def evaluate(pos):
         if mode == "resource":
-            r = mpbsi_evaluator_resource(pos, base, land_available)
+            r = mpbsi_evaluator_resource(pos, base, land_available, weights=weights)
         else:
-            r = mpbsi_evaluator(pos, base, land_available)
+            r = mpbsi_evaluator(pos, base, land_available, weights=weights)
         return r.mpbsi, r
 
     # ── Initialisation ────────────────────────────────────────────────────────
@@ -1902,14 +1916,15 @@ def _crowding_distance(costs: np.ndarray, front: list) -> np.ndarray:
 
 def nsga2_optimize(
     base:              BaseData,
-    n_pop:             int   = 80,     # MATLAB NSGA_MASTER_MISSION.m: PopulationSize=80
-    max_gen:           int   = 60,     # MATLAB NSGA_MASTER_MISSION.m: MaxGenerations=60
+    n_pop:             int   = 80,
+    max_gen:           int   = 60,
     seed:              int   = 42,
     land_available:    float = 50_000.0,
     var_min:           Optional[np.ndarray] = None,
     var_max:           Optional[np.ndarray] = None,
     progress_callback: Optional[Callable]   = None,
-    mode:              str   = "mission",   # "mission" or "resource"
+    mode:              str   = "mission",
+    weights:           Optional[dict]       = None,
 ) -> OptimizationResult:
     """
     NSGA-II with objectives from NSGA_Objective_Mission.m:
@@ -1941,20 +1956,20 @@ def nsga2_optimize(
 
     def eval_multi(pos):
         if mode == "resource":
-            r = mpbsi_evaluator_resource(pos, base, land_available)
+            r = mpbsi_evaluator_resource(pos, base, land_available, weights=weights)
             f1 = -r.mpbsi if r.mpbsi > -1e5 else 1e3
             f2 = (55000*pos[0] + 120000*pos[1] + 15000*pos[2] +
                   70000*pos[3] + 15000*pos[4] + 110000*pos[5]) / 1e8
             if r.mpbsi < -1e5: f2 = 1e3
         else:
-            f1, f2 = nsga_objective_mission(pos, base, land_available)
+            f1, f2 = nsga_objective_mission(pos, base, land_available, weights=weights)
         return np.array([f1, f2])
 
     def eval_mpbsi(pos):
         if mode == "resource":
-            r = mpbsi_evaluator_resource(pos, base, land_available)
+            r = mpbsi_evaluator_resource(pos, base, land_available, weights=weights)
         else:
-            r = mpbsi_evaluator(pos, base, land_available)
+            r = mpbsi_evaluator(pos, base, land_available, weights=weights)
         return r
 
     pop      = rng.uniform(vmin, vmax, (n_pop, nVar))
@@ -2109,20 +2124,35 @@ def run_pipeline(
         # Land
         "land_available": 50_000.0,
         # PSO (MATLAB: nPop=30, MaxIt=80, w=0.8, wdamp=0.98, c1=c2=1.5)
-        "pso_n_pop":      30,   # MATLAB PSO_MPBSI_Mission_LandConstrained.m: nPop=30
-        "pso_max_it":     80,   # MATLAB PSO_MPBSI_Mission_LandConstrained.m: MaxIt=80
+        "pso_n_pop":      30,
+        "pso_max_it":     80,
         "pso_w":          0.8,
         "pso_wdamp":      0.98,
         "pso_c1":         1.5,
         "pso_c2":         1.5,
-        # NSGA-II (MATLAB NSGA_MASTER_MISSION.m: PopulationSize=80, MaxGenerations=60)
+        # NSGA-II
         "nsga2_n_pop":    80,
         "nsga2_max_gen":  60,
         # Bounds override
         "bounds":         {},
+        # MPBSI pillar weights (user-adjustable — MATLAB defaults below)
+        "w_esi":          None,   # None = use mode default
+        "w_ecsi":         None,
+        "w_tri":          None,
+        "w_ori":          None,
+        "w_lsi":          None,
     }
     if config:
         cfg.update(config)
+
+    # ── Resolve MPBSI pillar weights ──────────────────────────────────────────
+    # Use mode defaults if not overridden by user
+    _mission_w  = {"w_esi": 0.15, "w_ecsi": 0.25, "w_tri": 0.30, "w_ori": 0.15, "w_lsi": 0.15}
+    _resource_w = {"w_esi": 0.05, "w_ecsi": 0.20, "w_tri": 0.30, "w_ori": 0.25, "w_lsi": 0.20}
+    _mode_defaults = _resource_w if mode == "resource" else _mission_w
+    weights = {k: float(cfg[k]) if cfg[k] is not None else _mode_defaults[k]
+               for k in ("w_esi", "w_ecsi", "w_tri", "w_ori", "w_lsi")}
+    cfg.update(weights)   # store resolved weights back into cfg for results
 
     results  = {"algorithm": algo, "mode": mode, "config": cfg, "steps": {}}
     t_start  = time.perf_counter()
@@ -2260,6 +2290,7 @@ def run_pipeline(
             var_max=var_max_arr,
             progress_callback=progress_callback,
             mode=mode,
+            weights=weights,
         )
     elif algo_upper in ("NSGA-II", "NSGA2"):
         opt = nsga2_optimize(
@@ -2272,12 +2303,21 @@ def run_pipeline(
             var_max=var_max_arr,
             progress_callback=progress_callback,
             mode=mode,
+            weights=weights,
         )
     else:
         raise ValueError(f"Unknown algorithm: {algo}. Use 'PSO' or 'NSGA-II'.")
 
     results["optimization"]           = json.loads(opt.to_json())
     results["total_runtime_seconds"]  = round(time.perf_counter() - t_start, 2)
+    # Store the resolved weights so the UI can display what was actually used
+    results["weights_used"] = {
+        "w_esi":  weights["w_esi"],
+        "w_ecsi": weights["w_ecsi"],
+        "w_tri":  weights["w_tri"],
+        "w_ori":  weights["w_ori"],
+        "w_lsi":  weights["w_lsi"],
+    }
 
     # ── Update step7 with optimised dispatch values ───────────────────────────
     # The pre-optimisation step7 used default config sizes (e.g. 1500 kWh battery)

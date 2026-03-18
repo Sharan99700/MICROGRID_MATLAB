@@ -435,6 +435,36 @@ with st.sidebar:
 
     st.divider()
 
+    # ── MPBSI Pillar Weights ──
+    st.markdown("##### ⚖️ MPBSI Pillar Weights")
+    _def = {"mission": (0.15, 0.25, 0.30, 0.15, 0.15),
+            "resource": (0.05, 0.20, 0.30, 0.25, 0.20)}
+    _d = _def.get(mode_key, _def["mission"])
+    with st.expander("Adjust pillar weights", expanded=False):
+        c1, c2 = st.columns(2)
+        w_esi  = c1.number_input("ESI",  0.0, 1.0, _d[0], 0.01, key="w_esi",  help="Environmental Sustainability")
+        w_ecsi = c2.number_input("EcSI", 0.0, 1.0, _d[1], 0.01, key="w_ecsi", help="Economic Sustainability")
+        w_tri  = c1.number_input("TRI",  0.0, 1.0, _d[2], 0.01, key="w_tri",  help="Technical Reliability")
+        w_ori  = c2.number_input("ORI",  0.0, 1.0, _d[3], 0.01, key="w_ori",  help="Operational Resilience")
+        w_lsi  = c1.number_input("LSI",  0.0, 1.0, _d[4], 0.01, key="w_lsi",  help="Logistics Sustainability")
+        _sum = round(w_esi + w_ecsi + w_tri + w_ori + w_lsi, 4)
+        if abs(_sum - 1.0) < 0.01:
+            st.success(f"✅ Weights sum = {_sum:.2f}")
+        else:
+            st.error(f"⚠️ Weights sum = {_sum:.2f} — must equal 1.00 before running")
+        if st.button("↺ Reset to mode defaults", key="reset_weights"):
+            for k, v in zip(["w_esi","w_ecsi","w_tri","w_ori","w_lsi"], _d):
+                st.session_state[k] = v
+            st.rerun()
+    # Always read from session state so values persist even when expander is closed
+    w_esi  = float(st.session_state.get("w_esi",  _d[0]))
+    w_ecsi = float(st.session_state.get("w_ecsi", _d[1]))
+    w_tri  = float(st.session_state.get("w_tri",  _d[2]))
+    w_ori  = float(st.session_state.get("w_ori",  _d[3]))
+    w_lsi  = float(st.session_state.get("w_lsi",  _d[4]))
+
+    st.divider()
+
     # ── Variable Bounds ──
     st.markdown("##### 📐 Variable Bounds (Override)")
     st.caption("⚠️ Leave at defaults — PSO uses physics-derived bounds from land area above. Only override for custom experiments.")
@@ -1327,7 +1357,13 @@ if run_btn:
         "pso_c2":         float(pso_c2),
         "nsga2_n_pop":    int(n_pop)  if algo == "NSGA-II" else 80,
         "nsga2_max_gen":  int(max_it) if algo == "NSGA-II" else 60,
-        # Bounds only sent if user changed from defaults (PSO auto-derives from land_available)
+        # MPBSI pillar weights from sidebar sliders
+        "w_esi":          float(w_esi),
+        "w_ecsi":         float(w_ecsi),
+        "w_tri":          float(w_tri),
+        "w_ori":          float(w_ori),
+        "w_lsi":          float(w_lsi),
+        # Bounds only sent if user changed from defaults
         "bounds": {
             "pv_min":   float(pv_min),  "pv_max":   float(pv_max),
             "wind_min": float(wn_min),  "wind_max": float(wn_max),
@@ -1370,36 +1406,42 @@ if run_btn:
 
     def _progress_cb(it, max_it, best_mpbsi, feasible_count, phase=None):
         """Called by backend after every PSO iteration (and during init)."""
-        if phase:
-            # Initialisation phase — show particle init progress
-            prog_bar.progress(3, text=f"🔍 Initialising swarm… {phase}")
+        try:
+            if phase:
+                prog_bar.progress(3, text=f"🔍 Initialising swarm… {phase}")
+                iter_status.markdown(
+                    f"<div style='font-family:monospace;font-size:0.88em;color:#a0a8d4;'>"
+                    f"⚙️ Evaluating initial particles: <b style='color:#c8d0e8'>{phase}</b></div>",
+                    unsafe_allow_html=True
+                )
+                return
+            # Throttle: update every 5 iterations, always update first and last
+            if it > 1 and it < max_it and it % 5 != 0:
+                return
+            pct = max(5, int(it / max_it * 100))
+            feasible_txt = f" │ ✅ {feasible_count} feasible found" if feasible_count > 0 else " │ ⚠️ still searching"
+            prog_bar.progress(pct, text=f"🔄 {algo} Iteration {it}/{max_it}  ({pct}%){feasible_txt}")
+            color = "#38ef7d" if best_mpbsi > -1e5 else "#ff9f43"
+            w_cur = 0.8 * (0.98 ** it)
             iter_status.markdown(
-                f"<div style='font-family:monospace;font-size:0.88em;color:#a0a8d4;'>"
-                f"⚙️ Evaluating initial particles: <b style='color:#c8d0e8'>{phase}</b></div>",
+                f"<div style='font-family:monospace;font-size:0.88em;color:#a0a8d4;margin-top:6px;'>"
+                f"Iteration <b style='color:#c8d0e8;font-size:1.1em'>{it}</b> / {max_it}"
+                f" &nbsp;│&nbsp; w = {w_cur:.4f}",
                 unsafe_allow_html=True
             )
-            return
-        pct = max(5, int(it / max_it * 100))
-        feasible_txt = f" │ ✅ {feasible_count} feasible found" if feasible_count > 0 else " │ ⚠️ still searching…"
-        prog_bar.progress(pct, text=f"🔄 {algo} Iteration {it}/{max_it}  ({pct}%){feasible_txt}")
-        color = "#38ef7d" if best_mpbsi > -1e5 else "#ff9f43"
-        w_cur = 0.8 * (0.98 ** it)
-        iter_status.markdown(
-            f"<div style='font-family:monospace;font-size:0.88em;color:#a0a8d4;margin-top:6px;'>"
-            f"Iteration <b style='color:#c8d0e8;font-size:1.1em'>{it}</b> / {max_it}"
-            f" &nbsp;│&nbsp; w = {w_cur:.4f}"
-            f" &nbsp;│&nbsp; Stagnation: {max(0, it - feasible_count)}</div>",
-            unsafe_allow_html=True
-        )
-        best_status.markdown(
-            f"<div style='font-family:monospace;font-size:1.05em;margin-top:4px;'>"
-            f"Best MPBSI: <b style='color:{color};font-size:1.4em;'>"
-            f"{'%.4f' % best_mpbsi if best_mpbsi > -1e5 else '—'}</b>"
-            f"<span style='color:#8b9dc3;font-size:0.85em;'>"
-            f"{'  ✅ Feasible solution found!' if best_mpbsi > -1e5 else '  ⏳ No feasible solution yet'}"
-            f"</span></div>",
-            unsafe_allow_html=True
-        )
+            best_status.markdown(
+                f"<div style='font-family:monospace;font-size:1.05em;margin-top:4px;'>"
+                f"Best MPBSI: <b style='color:{color};font-size:1.4em;'>"
+                f"{'%.4f' % best_mpbsi if best_mpbsi > -1e5 else '—'}</b>"
+                f"<span style='color:#8b9dc3;font-size:0.85em;'>"
+                f"{'  ✅ Feasible solution found!' if best_mpbsi > -1e5 else '  ⏳ No feasible solution yet'}"
+                f"</span></div>",
+                unsafe_allow_html=True
+            )
+        except Exception:
+            # Silently ignore WebSocketClosedError and any other connection errors
+            # that occur when the browser tab is closed during a long run
+            pass
 
     # Update progress bar for the pipeline steps (before PSO starts)
     prog_bar.progress(5, text="📂 Step 1: Loading dataset…")
