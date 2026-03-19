@@ -1,28 +1,6 @@
 """
-MPBSI Framework — Complete Python Backend v4.0
-===============================================
-Exact Python translation of all 10 MATLAB step files + PSO + NSGA-II.
-
-MATLAB files faithfully reproduced:
-  Step1_Load_Akhnoor.m          → step1_load_data()
-  Step2_Solar_Model.m           → step2_solar_model()
-  Step3_Wind_Model.m            → step3_wind_model()
-  Step4_Hybrid_Generation.m     → step4_hybrid_generation()
-  Step5_Priority_Battery_Model.m→ step5_priority_battery()
-  Step6_Seasonal_Analysis.m     → step6_seasonal_analysis()
-  Step7_Priority_H2_Model.m     → step7_priority_h2()
-  Step8_Deficit_Window.m        → step8_deficit_window()
-  Step9_Survivability_H2.m      → step9_survivability_sizing()
-  Step10_Priority_H2_Surv.m     → step10_survivability_dispatch()
-  microgrid_dispatch_mission.m  → microgrid_dispatch_full()
-  MPBSI_Evaluator_Mission_Land  → mpbsi_evaluator()
-  PSO_MPBSI_Mission_LandConstr. → pso_optimize()
-  NSGA_Objective_Mission.m      → nsga2_optimize()
-
-Author : IEEE-grade MATLAB→Python translation
-Version: 4.0 (Research-grade, publication-ready)
+MPBSI Framework Backend v4.0
 """
-
 from __future__ import annotations
 
 import json
@@ -998,9 +976,9 @@ def microgrid_dispatch_full(
     P_FC_max  = x[5]   # kW  fuel cell rated
 
     GHI  = base.ghi.copy().astype(float)
-    Wind = base.wind_speed.copy().astype(float)
-    Temp = base.temperature.copy().astype(float)
-    Load = base.load.copy().astype(float)
+    Wind = np.nan_to_num(base.wind_speed.copy().astype(float), nan=0.0)
+    Temp = np.nan_to_num(base.temperature.copy().astype(float), nan=25.0)
+    Load = np.nan_to_num(base.load.copy().astype(float), nan=0.0)
     N    = base.N
 
     # ── Clean GHI ────────────────────────────────────────────────────────────
@@ -1114,7 +1092,7 @@ def microgrid_dispatch_full(
     ren_ratio      = Annual_RES / total_load     if total_load     > 0 else 0.0
 
     # Autonomy — MATLAB: usable_battery + usable_h2_electric / critical_daily
-    usable_battery  = SOC_max - SOC_min             # = 0.6 × E_BESS
+    usable_battery  = SOC_max - SOC_min             # = 0.8 × E_BESS  (SOC_max=BESS, SOC_min=0.2×BESS)
     usable_h2_elec  = E_H2_max * eta_FC             # full tank electricity
     critical_daily  = total_critical / 365.0
     autonomy_days   = (usable_battery + usable_h2_elec) / critical_daily if critical_daily > 0 else 0.0
@@ -1162,7 +1140,7 @@ def mpbsi_evaluator(
     Pillar formulas (MATLAB exact):
     ────────────────────────────────
     ESI  = 0.5×E1 + 0.5×E2        where E1=1, E2=1/(1+|E2_raw-1|)
-    EcSI = 0.5×C1 + 0.5×C2        LCOE-based + CAPEX-based
+    EcSI = 0.5×C1 + 0.5×C2        C1=1/(1+LCOE/50) [Rs 50/kWh ref], C2=CAPEX-based
     TRI  = 0.6×T1 + 0.2×T2 + 0.2×T3
     ORI  = 0.4×R1 + 0.3×R2 + 0.3×R3
     LSI  = 0.4×L1 + 0.3×L2 + 0.3×L3
@@ -1172,7 +1150,7 @@ def mpbsi_evaluator(
 
     _inf_result = lambda: MPBSIResult(
         mpbsi=-1e6,
-        pillars=Pillars(ESI=0, EcSI=0, TRI=0, ORI=0, LSI=0),
+        pillars=Pillars(ESI=0.0, EcSI=0.0, TRI=0.0, ORI=0.0, LSI=0.0),
         is_feasible=False,
         simulation=SimulationResult(
             is_feasible=False, lpsp_critical=1.0, renewable_ratio=0.0,
@@ -1192,7 +1170,7 @@ def mpbsi_evaluator(
     if not sim.is_feasible:
         return MPBSIResult(
             mpbsi=-1e6,
-            pillars=Pillars(ESI=0, EcSI=0, TRI=0, ORI=0, LSI=0),
+            pillars=Pillars(ESI=0.0, EcSI=0.0, TRI=0.0, ORI=0.0, LSI=0.0),
             is_feasible=False,
             simulation=sim,
         )
@@ -1201,7 +1179,7 @@ def mpbsi_evaluator(
     if sim.autonomy_days < 7.0:
         return MPBSIResult(
             mpbsi=-1e6,
-            pillars=Pillars(ESI=0, EcSI=0, TRI=0, ORI=0, LSI=0),
+            pillars=Pillars(ESI=0.0, EcSI=0.0, TRI=0.0, ORI=0.0, LSI=0.0),
             is_feasible=False,
             simulation=sim,
         )
@@ -1212,8 +1190,11 @@ def mpbsi_evaluator(
 
     # ── 4. ESI (Environmental) ────────────────────────────────────────────────
     E1     = 1.0
-    E2_raw = Annual_RES / Annual_Load if Annual_Load > 0 else 0.0
-    E2     = 1.0 / (1.0 + abs(E2_raw - 1.0))
+    # E2: real renewable coverage — fraction of demand actually met by RES.
+    # When RES >= Load (always true at feasibility), E2 = 1.0.
+    # Old formula 1/(1+|ratio-1|) penalised surplus, making E2<1 even when
+    # demand is 100% covered. Physical reality: if RES covers all load → E2=1.
+    E2     = min(Annual_RES, Annual_Load) / Annual_Load if Annual_Load > 0 else 0.0
     ESI    = 0.5 * E1 + 0.5 * E2
 
     # ── 5. EcSI (Economic) ────────────────────────────────────────────────────
@@ -1226,15 +1207,24 @@ def mpbsi_evaluator(
     CAPEX    = Cost_PV + Cost_WT + Cost_Bat + Cost_EL + Cost_H2 + Cost_FC
 
     LCOE = CAPEX / (Annual_RES * 1000.0 * 20.0) if Annual_RES > 0 else 1e6
-    C1   = 1.0 / (1.0 + 10.0 * LCOE)
+    # C1: LCOE cost-competitiveness index.
+    # Original MATLAB uses 10×LCOE (calibrated for $/kWh, ~0.05–0.15).
+    # Akhnoor costs are in Rs/kWh (~20–60 Rs/kWh) so the multiplier is
+    # normalised to Rs 50/kWh reference (÷50 = equivalent of ×0.02).
+    # This restores C1 as an active cost-signal — without it C1≈0.002
+    # making EcSI a dead pillar and the PSO blind to LCOE differences.
+    C1   = 1.0 / (1.0 + LCOE / 50.0)   # normalised to Rs 50/kWh ref
     C2   = 1.0 / (1.0 + CAPEX / 1e9)
     EcSI = 0.5 * C1 + 0.5 * C2
 
     # ── 6. TRI (Technical Reliability) ───────────────────────────────────────
     T1         = 1.0           # LPSP gate already passed
     T2         = Aut_factor    # = 1.0
-    redundancy = x[2] / 1000.0 + x[5] / 100.0
-    T3         = 1.0 - np.exp(-redundancy / 3.0)
+    # T3: real redundancy score — normalised to mission doctrine (7-day autonomy).
+    # Old formula 1-exp(-redundancy/3) never reaches 1.0 even when autonomy
+    # far exceeds the 7-day requirement. Physical reality: if the system can
+    # sustain ≥7 days without any renewable input, redundancy is fully met.
+    T3         = min(sim.autonomy_days / 7.0, 1.0)
     TRI        = 0.6 * T1 + 0.2 * T2 + 0.2 * T3
 
     # ── 7. ORI (Operational Resilience) ──────────────────────────────────────
@@ -1291,10 +1281,10 @@ def microgrid_dispatch_resource(
         float(x[3]), float(x[4]), float(x[5]),
     )
 
-    ghi  = base.ghi
-    temp = base.temperature
-    wind = base.wind_speed
-    load = base.load
+    ghi  = np.nan_to_num(base.ghi,  nan=0.0, posinf=0.0, neginf=0.0)
+    temp = np.nan_to_num(base.temperature, nan=25.0, posinf=25.0, neginf=25.0)
+    wind = np.nan_to_num(base.wind_speed,  nan=0.0, posinf=0.0, neginf=0.0)
+    load = np.nan_to_num(base.load,        nan=0.0, posinf=0.0, neginf=0.0)
     N    = base.N
 
     # PV model (same as mission)
@@ -1328,7 +1318,7 @@ def microgrid_dispatch_resource(
     E_H2    = 0.5  * E_H2_max
 
     unmet_c = 0.0; curt_semi = 0.0; curt_non = 0.0
-    Annual_RES = float(np.sum(P_RES))
+    Annual_RES = 0.0                                   # MATLAB: initialise to 0, accumulate in loop
 
     for t in range(N):
         FC_used     = False
@@ -1442,7 +1432,7 @@ def mpbsi_evaluator_resource(
     Area_PV = 10.0 * x[0]
     Area_WT = 15.0 * x[1]
     if (Area_PV + Area_WT) > (land_available + 1e-2):
-        return MPBSIResult(mpbsi=-1e6, pillars=None, is_feasible=False, simulation=None)
+        return MPBSIResult(mpbsi=-1e6, pillars=Pillars(ESI=0.0,EcSI=0.0,TRI=0.0,ORI=0.0,LSI=0.0), is_feasible=False, simulation=None)
 
     sim = microgrid_dispatch_resource(x, base)
 
@@ -1451,7 +1441,7 @@ def mpbsi_evaluator_resource(
 
     # Feasibility (Resource mode — no autonomy hard limit)
     if sim.lpsp_critical > 1e-4 or Annual_RES < Annual_Load:
-        return MPBSIResult(mpbsi=-1e6, pillars=None, is_feasible=False, simulation=sim)
+        return MPBSIResult(mpbsi=-1e6, pillars=Pillars(ESI=0.0,EcSI=0.0,TRI=0.0,ORI=0.0,LSI=0.0), is_feasible=False, simulation=sim)
 
     eta_FC = 0.55
     usable_storage = (0.95 - 0.20) * x[2] + x[4] * eta_FC
@@ -1460,19 +1450,21 @@ def mpbsi_evaluator_resource(
 
     # ── ESI ──────────────────────────────────────────────────────────────────
     E1 = 1.0
-    E2_raw = Annual_RES / max(Annual_Load, 1e-9)
-    E2 = 1.0 / (1.0 + abs(E2_raw - 1.0))
+    # E2: real coverage — demand fully met by RES = 1.0
+    E2 = min(Annual_RES, Annual_Load) / max(Annual_Load, 1e-9)
+    # E3: curtailment relative to actual load (not generation)
     Curt = sim.curtailed_semi_MWh + sim.curtailed_non_MWh
-    Curt_ratio = Curt / max(Annual_RES, 1e-6)
-    E3 = 1.0 - Curt_ratio
-    E4 = 1.0 - np.exp(-storage_ratio / 3.0)
+    Curt_ratio = Curt / max(Annual_Load, 1e-6)
+    E3 = max(1.0 - Curt_ratio, 0.0)
+    # E4: real storage adequacy normalised to 1.5-day reference
+    E4 = min(storage_ratio / 1.5, 1.0)
     ESI = 0.30*E1 + 0.30*E2 + 0.20*E3 + 0.20*E4
 
     # ── EcSI ─────────────────────────────────────────────────────────────────
     CAPEX = (55000*x[0] + 120000*x[1] + 15000*x[2] +
              70000*x[3] + 15000*x[4] + 110000*x[5])
     LCOE  = CAPEX / max(Annual_RES * 1000.0 * 20.0, 1e-6)
-    C1 = 1.0 / (1.0 + 10.0 * LCOE)
+    C1 = 1.0 / (1.0 + LCOE / 50.0)    # normalised to Rs 50/kWh ref
     C2 = 1.0 / (1.0 + CAPEX / 1e9)
     OM_ratio = (0.02 * CAPEX) / max(Annual_RES * 1000.0, 1.0)
     C3 = 1.0 / (1.0 + 50.0 * OM_ratio)
@@ -1481,10 +1473,13 @@ def mpbsi_evaluator_resource(
 
     # ── TRI ──────────────────────────────────────────────────────────────────
     T1 = 1.0
-    T2 = 1.0 - np.exp(-sim.autonomy_days / 1.5)          # smooth, no hard 7d
+    # T2: normalised to 3-day target (resource/grid-tied benchmark)
+    T2 = min(sim.autonomy_days / 3.0, 1.0)
+    # T3: normalised redundancy (reference: BESS=2000kWh+FC=100kW → ratio=1)
     redundancy = (x[2] / 1000.0 + x[5] / 100.0)
-    T3 = 1.0 - np.exp(-redundancy / 3.0)
-    T4 = 1.0 - np.exp(-storage_ratio / 3.0)
+    T3 = min(redundancy / 3.0, 1.0)
+    # T4: normalised storage ratio (1.5-day reference)
+    T4 = min(storage_ratio / 1.5, 1.0)
     TRI = 0.40*T1 + 0.30*T2 + 0.20*T3 + 0.10*T4
 
     # ── ORI ──────────────────────────────────────────────────────────────────
@@ -1845,7 +1840,7 @@ def pso_optimize(
     logger.info("PSO done | Best MPBSI = %.4f | Runtime: %.1f s", gbest_cost, runtime)
 
     metrics = {}
-    if gbest_result and gbest_result.is_feasible:
+    if gbest_result and gbest_result.simulation is not None:
         s = gbest_result.simulation
         metrics = {
             "lpsp_critical":       s.lpsp_critical,
@@ -2154,7 +2149,8 @@ def run_pipeline(
                for k in ("w_esi", "w_ecsi", "w_tri", "w_ori", "w_lsi")}
     cfg.update(weights)   # store resolved weights back into cfg for results
 
-    results  = {"algorithm": algo, "mode": mode, "config": cfg, "steps": {}}
+    results  = {"algorithm": algo, "mode": mode, "config": cfg, "steps": {},
+                 "weights_used": weights}
     t_start  = time.perf_counter()
 
     logger.info("═══ MPBSI Pipeline START — algo=%s mode=%s ═══", algo, mode.upper())

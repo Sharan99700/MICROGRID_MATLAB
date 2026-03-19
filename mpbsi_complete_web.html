@@ -485,9 +485,76 @@
     </header>
 
     <div class="container">
+
+    <!-- Hidden placeholders for JS compatibility (optimize tab removed) -->
+    <div id="optimize_placeholders" style="display:none;">
+        <!-- Mode -->
+        <input type="hidden" id="selected_mode" value="mission">
+        <label id="mode_label_mission"></label>
+        <label id="mode_label_resource"></label>
+        <span id="mode_check_mission"></span>
+        <span id="mode_check_resource"></span>
+        <!-- Weights -->
+        <input type="hidden" id="w_esi"  value="0.15">
+        <input type="hidden" id="w_ecsi" value="0.25">
+        <input type="hidden" id="w_tri"  value="0.30">
+        <input type="hidden" id="w_ori"  value="0.15">
+        <input type="hidden" id="w_lsi"  value="0.15">
+        <!-- Weight labels (setMode updates these) -->
+        <span id="lbl_tri"></span>
+        <span id="lbl_ecsi"></span>
+        <span id="lbl_ori"></span>
+        <span id="lbl_lsi"></span>
+        <span id="lbl_esi"></span>
+        <span id="weight_sum"></span>
+        <!-- Tile weight spans (updateWeightTiles updates these) -->
+        <span id="tile_w_esi_m"></span>  <span id="tile_w_ecsi_m"></span>
+        <span id="tile_w_tri_m"></span>  <span id="tile_w_ori_m"></span>
+        <span id="tile_w_lsi_m"></span>
+        <span id="tile_w_esi_r"></span>  <span id="tile_w_ecsi_r"></span>
+        <span id="tile_w_tri_r"></span>  <span id="tile_w_ori_r"></span>
+        <span id="tile_w_lsi_r"></span>
+        <!-- Constraints -->
+        <input type="hidden" id="min_autonomy"   value="7">
+        <input type="hidden" id="land_area_input" value="50000">
+        <span id="constraint_autonomy"></span>
+        <!-- Bounds (physics-derived via Streamlit, these are fallback defaults) -->
+        <input type="hidden" id="pv_min"   value="300">
+        <input type="hidden" id="pv_max"   value="5000">
+        <input type="hidden" id="wind_min" value="0">
+        <input type="hidden" id="wind_max" value="3333">
+        <input type="hidden" id="batt_min" value="10000">
+        <input type="hidden" id="batt_max" value="65000">
+        <input type="hidden" id="elec_min" value="50">
+        <input type="hidden" id="elec_max" value="500">
+        <input type="hidden" id="h2_min"   value="10000">
+        <input type="hidden" id="h2_max"   value="80000">
+        <input type="hidden" id="fc_min"   value="100">
+        <input type="hidden" id="fc_max"   value="600">
+        <!-- Cost inputs (MATLAB defaults) -->
+        <input type="hidden" id="cost_pv"      value="55000">
+        <input type="hidden" id="cost_wind"    value="120000">
+        <input type="hidden" id="cost_battery" value="15000">
+        <input type="hidden" id="cost_fc"      value="110000">
+        <input type="hidden" id="cost_elec"    value="70000">
+        <input type="hidden" id="cost_h2"      value="15000">
+        <!-- Dataset status bar -->
+        <div id="dataset_status_bar" style="display:none;">
+            <span id="calc_avg_solar"></span>
+            <span id="calc_avg_wind"></span>
+            <span id="calc_peak_load"></span><span id="calc_peak_load_2"></span>
+            <span id="calc_avg_load"></span><span id="calc_avg_load_2"></span>
+            <span id="calc_annual"></span>
+            <input type="hidden" id="peak_load_input">
+            <input type="hidden" id="avg_load_input">
+            <input type="hidden" id="annual_demand">
+        </div>
+        <!-- Altitude input -->
+        <input type="hidden" id="altitude_input" value="3500">
+    </div>
+
         <div class="tabs">
             <button class="tab active" onclick="switchTab('initial_sizing')">📋 Summary</button>
-            <button class="tab" onclick="switchTab('optimize')">⚙️ Optimise</button>
             <button class="tab" id="tab_btn_running" onclick="switchTab('running')" style="display:none;">⚡ Running...</button>
             <button class="tab" onclick="switchTab('results')">📈 Results</button>
             <button class="tab" onclick="switchTab('steps_detail')">🔬 10-Step Analysis</button>
@@ -672,202 +739,6 @@
             </div><!-- /summary_content -->
         </div>
 
-        <!-- OPTIMIZE TAB -->
-        <div id="optimize" class="tab-content">
-
-            <!-- ── Mode Selector Card ── -->
-            <div class="card full-width" style="padding:20px 24px; margin-bottom:4px;">
-                <div style="font-size:0.72em;font-weight:700;letter-spacing:2px;text-transform:uppercase;
-                            color:rgba(167,139,250,0.7);margin-bottom:14px;">🎯 OPTIMISATION MODE</div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-                    <!-- Mission -->
-                    <label id="mode_label_mission" onclick="setMode('mission')" style="cursor:pointer;
-                        background:rgba(167,139,250,0.15);border:2px solid rgba(167,139,250,0.6);
-                        border-radius:12px;padding:14px 16px;display:block;transition:all 0.2s;">
-                        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-                            <span style="font-size:1.5em;">⚔️</span>
-                            <span style="font-weight:700;color:#a78bfa;font-size:1em;">Mission Mode</span>
-                            <span id="mode_check_mission" style="margin-left:auto;color:#a78bfa;font-size:1.2em;">✓</span>
-                        </div>
-                        <div style="font-size:0.75em;color:#8b9dc3;line-height:1.5;">
-                            Military doctrine · Hard 7-day autonomy · LPSP ≤ 1e-4 · REN ≥ 99.9%
-                        </div>
-                        <div style="margin-top:8px;font-size:0.72em;color:#a78bfa;font-family:var(--mono);">
-                            <span id="tile_w_esi_m">ESI 15%</span> · <span id="tile_w_ecsi_m">EcSI 25%</span> · <span id="tile_w_tri_m">TRI 30%</span> · <span id="tile_w_ori_m">ORI 15%</span> · <span id="tile_w_lsi_m">LSI 15%</span>
-                        </div>
-                    </label>
-                    <!-- Resource -->
-                    <label id="mode_label_resource" onclick="setMode('resource')" style="cursor:pointer;
-                        background:rgba(56,239,125,0.04);border:2px solid rgba(56,239,125,0.2);
-                        border-radius:12px;padding:14px 16px;display:block;transition:all 0.2s;">
-                        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-                            <span style="font-size:1.5em;">🌿</span>
-                            <span style="font-weight:700;color:#8b9dc3;font-size:1em;">Resource Mode</span>
-                            <span id="mode_check_resource" style="margin-left:auto;color:#38ef7d;font-size:1.2em;display:none;">✓</span>
-                        </div>
-                        <div style="font-size:0.75em;color:#8b9dc3;line-height:1.5;">
-                            Grid-tied / peacetime · No hard autonomy · 100% renewable · Hub-height wind
-                        </div>
-                        <div style="margin-top:8px;font-size:0.72em;color:#38ef7d;font-family:var(--mono);">
-                            <span id="tile_w_esi_r">ESI 5%</span> · <span id="tile_w_ecsi_r">EcSI 20%</span> · <span id="tile_w_tri_r">TRI 30%</span> · <span id="tile_w_ori_r">ORI 25%</span> · <span id="tile_w_lsi_r">LSI 20%</span>
-                        </div>
-                    </label>
-                </div>
-                <input type="hidden" id="selected_mode" value="mission">
-            </div>
-
-            <!-- ── Dataset Status Bar (populated after upload) ── -->
-            <div id="dataset_status_bar" class="card full-width" style="padding:14px 20px; display:none;">
-                <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
-                    <div style="font-size:0.78em; font-weight:700; color:#38ef7d; letter-spacing:1px;">
-                        ✅ DATASET LOADED
-                    </div>
-                    <div style="display:flex; gap:20px; flex-wrap:wrap; font-family:var(--mono); font-size:0.8em;">
-                        <span style="color:#FFD700;">☀️ Avg GHI: <strong id="calc_avg_solar">—</strong> kW/m²</span>
-                        <span style="color:#00BFFF;">🌬️ Avg Wind: <strong id="calc_avg_wind">—</strong> m/s</span>
-                        <span style="color:#FF6347;">⚡ Peak Load: <strong id="calc_peak_load">—</strong> kW
-                            <span id="calc_peak_load_2" style="display:none;"></span>
-                        </span>
-                        <span style="color:#32CD32;">📊 Avg Load: <strong id="calc_avg_load">—</strong> kW
-                            <span id="calc_avg_load_2" style="display:none;"></span>
-                        </span>
-                        <span style="color:#a78bfa;">📅 Annual: <strong id="calc_annual">—</strong> MWh/yr</span>
-                    </div>
-                </div>
-                <!-- Hidden inputs used by legacy code and PSO bounds hints -->
-                <input type="hidden" id="peak_load_input">
-                <input type="hidden" id="avg_load_input">
-                <input type="hidden" id="annual_demand">
-            </div>
-
-            <div class="card">
-                <button class="collapsible" onclick="toggleCollapsible(this)">⚙️ MPBSI Weights</button>
-                <div class="collapsible-content">
-                    <div class="info-box" style="background: rgba(56, 239, 125, 0.1); border-left: 4px solid #38ef7d; margin-bottom: 15px;">
-                        <p><strong>💡 Auto-Optimize:</strong> Click button below to automatically adjust weights for maximum MPBSI score</p>
-                        <button onclick="autoOptimizeWeights()" style="background: linear-gradient(135deg, #38ef7d 0%, #11998e 100%); color: #fff; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; margin-top: 10px; width: 100%;">
-                            🎯 Auto-Optimize Weights for Max MPBSI
-                        </button>
-                    </div>
-                    <div class="input-row" style="margin-top: 15px;">
-                        <div class="input-group">
-                            <label id="lbl_tri">TRI: Tactical Resilience (w=0.30)</label>
-                            <input type="number" id="w_tri" value="0.30" min="0" max="1" step="0.01" onchange="updateWeightSum(); updateWeightTiles();">
-                        </div>
-                        <div class="input-group">
-                            <label id="lbl_ecsi">EcSI: Economic Sustainability (w=0.25)</label>
-                            <input type="number" id="w_ecsi" value="0.25" min="0" max="1" step="0.01" onchange="updateWeightSum(); updateWeightTiles();">
-                        </div>
-                    </div>
-                    <div class="input-row">
-                        <div class="input-group">
-                            <label id="lbl_ori">ORI: Operational Reliability (w=0.15)</label>
-                            <input type="number" id="w_ori" value="0.15" min="0" max="1" step="0.01" onchange="updateWeightSum(); updateWeightTiles();">
-                        </div>
-                        <div class="input-group">
-                            <label id="lbl_lsi">LSI: Logistics Support (w=0.15)</label>
-                            <input type="number" id="w_lsi" value="0.15" min="0" max="1" step="0.01" onchange="updateWeightSum(); updateWeightTiles();">
-                        </div>
-                    </div>
-                    <div class="input-group">
-                        <label id="lbl_esi">ESI: Energy Security (w=0.15)</label>
-                        <input type="number" id="w_esi" value="0.15" min="0" max="1" step="0.01" onchange="updateWeightSum(); updateWeightTiles();">
-                    </div>
-                    <p id="weight_sum" style="margin-top: 15px; font-weight: bold;"></p>
-                </div>
-            </div>
-
-            <div class="card">
-                <button class="collapsible" onclick="toggleCollapsible(this)">💰 Component Costs &amp; Financial Parameters</button>
-                <div class="collapsible-content">
-                    <p style="color:#a0a8d4;font-size:0.85em;margin:10px 0 6px;">Capital costs match Python backend defaults.</p>
-                    <div class="input-row" style="margin-top:8px;">
-                        <div class="input-group">
-                            <label>PV (₹/kWp)</label>
-                            <input type="number" id="cost_pv" value="55000" step="1000">
-                        </div>
-                        <div class="input-group">
-                            <label>Wind (₹/kW)</label>
-                            <input type="number" id="cost_wind" value="120000" step="1000">
-                        </div>
-                    </div>
-                    <div class="input-row">
-                        <div class="input-group">
-                            <label>Battery (₹/kWh)</label>
-                            <input type="number" id="cost_battery" value="15000" step="1000">
-                        </div>
-                        <div class="input-group">
-                            <label>Fuel Cell (₹/kW)</label>
-                            <input type="number" id="cost_fc" value="110000" step="1000">
-                        </div>
-                    </div>
-                    <div class="input-row">
-                        <div class="input-group">
-                            <label>Electrolyzer (₹/kW)</label>
-                            <input type="number" id="cost_elec" value="70000" step="1000">
-                        </div>
-                        <div class="input-group">
-                            <label>H2 Storage (₹/kWh)</label>
-                            <input type="number" id="cost_h2" value="15000" step="1000">
-                        </div>
-                    </div>
-                    <hr style="border-color:rgba(102,126,234,0.2);margin:12px 0;">
-                    <div class="input-row">
-                        <div class="input-group">
-                            <label>Discount Rate (%/yr)</label>
-                            <input type="number" id="fp_discount" value="8" min="1" max="20" step="0.5">
-                        </div>
-                        <div class="input-group">
-                            <label>Project Lifetime (yrs)</label>
-                            <input type="number" id="fp_lifetime" value="20" min="10" max="30" step="1">
-                        </div>
-                    </div>
-                    <div class="input-row">
-                        <div class="input-group">
-                            <label>O&amp;M Rate (% CAPEX/yr)</label>
-                            <input type="number" id="fp_om_rate" value="2" min="0.5" max="5" step="0.5">
-                        </div>
-                        <div class="input-group">
-                            <label>Battery Replacement (yr)</label>
-                            <input type="number" id="fp_bat_replace" value="10" min="5" max="15" step="1">
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card">
-                <button class="collapsible" onclick="toggleCollapsible(this)">🎯 System Constraints</button>
-                <div class="collapsible-content">
-                    <div class="input-row" style="margin-top: 15px;">
-                        <div class="input-group">
-                            <label>Minimum Autonomy (days)</label>
-                            <input type="number" id="min_autonomy" value="10" min="5" max="30" step="1" onchange="updateConstraintInfo()">
-                            <p style="color: #8b9dc3; font-size: 0.85em; margin-top: 5px;">Research paper: 10 days</p>
-                        </div>
-                        <div class="input-group">
-                            <label>Maximum LPSP Critical (%)</label>
-                            <input type="number" id="max_lpsp" value="0.1" min="0" max="5" step="0.1" readonly>
-                            <p style="color: #8b9dc3; font-size: 0.85em; margin-top: 5px;">Fixed: 0.1% (zero tolerance)</p>
-                        </div>
-                    </div>
-                    <div class="input-group">
-                        <label>Minimum RES Adequacy Ratio</label>
-                        <input type="number" id="min_res_adequacy" value="1.0" min="1.0" max="2.0" step="0.1" readonly>
-                        <p style="color: #8b9dc3; font-size: 0.85em; margin-top: 5px;">Fixed: 1.0 (100% renewable)</p>
-                    </div>
-                    <div class="info-box" id="constraint_info" style="margin-top: 15px;">
-                        <p><strong>Current Constraints:</strong></p>
-                        <p>✓ Minimum Autonomy: <strong id="constraint_autonomy">10 days</strong></p>
-                        <p>✓ Critical Load LPSP: <strong>&lt; 0.1%</strong></p>
-                        <p>✓ RES Adequacy: <strong>≥ 1.0</strong></p>
-                    </div>
-                </div>
-            </div>
-            </div>
-
-
-
-        </div>
 
         <!-- RUNNING TAB -->
         <div id="running" class="tab-content">
@@ -1473,7 +1344,7 @@
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             const tabLabels = {
-                initial_sizing: 'Summary', optimize: 'Optimise', running: 'Running',
+                initial_sizing: 'Summary', running: 'Running',
                 results: 'Results', steps_detail: '10-Step', graphs: 'Graphs',
                 pillars: 'Pillars', costs_report: 'Costs'
             };
@@ -2189,7 +2060,7 @@
 
             const pillarHtml = Object.entries(pillars).map(([k, v]) => {
                 const score = typeof v === 'number' ? v : 0;
-                const color = score >= 0.8 ? '#38ef7d' : score >= 0.6 ? '#FFD700' : '#ff6b6b';
+                const color = score >= 0.85 ? '#38ef7d' : score >= 0.65 ? '#FFD700' : '#ff6b6b';
                 return `<div class="metric-card">
                     <div class="label">${k} (${getWeight(k)}%)</div>
                     <div class="value" style="color:${color};">${(score*100).toFixed(1)}%</div>
@@ -2267,7 +2138,7 @@
                     <div class="results-grid">
                         <div class="metric-card">
                             <div class="label">MPBSI Score</div>
-                            <div class="value" id="mpbsi-score" style="font-size:2.5em; color:${mpbsi>=0.8?'#38ef7d':mpbsi>=0.6?'#FFD700':'#ff6b6b'};">${mpbsi.toFixed(4)}</div>
+                            <div class="value" id="mpbsi-score" style="font-size:2.5em; color:${mpbsi>=0.87?'#38ef7d':mpbsi>=0.75?'#FFD700':'#ff6b6b'};">${mpbsi.toFixed(4)}</div>
                         </div>
                         <div class="metric-card">
                             <div class="label">Critical LPSP</div>
