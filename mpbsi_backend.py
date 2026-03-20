@@ -1190,11 +1190,11 @@ def mpbsi_evaluator(
 
     # ── 4. ESI (Environmental) ────────────────────────────────────────────────
     E1     = 1.0
-    # E2: real renewable coverage — fraction of demand actually met by RES.
-    # When RES >= Load (always true at feasibility), E2 = 1.0.
-    # Old formula 1/(1+|ratio-1|) penalised surplus, making E2<1 even when
-    # demand is 100% covered. Physical reality: if RES covers all load → E2=1.
-    E2     = min(Annual_RES, Annual_Load) / Annual_Load if Annual_Load > 0 else 0.0
+    # E2: MATLAB exact — penalises both deficit AND surplus.
+    # E2 = 1 only when RES = Load exactly; penalises over-generation,
+    # which keeps PSO from oversizing PV beyond what demand needs.
+    E2_raw = Annual_RES / Annual_Load if Annual_Load > 0 else 0.0
+    E2     = 1.0 / (1.0 + abs(E2_raw - 1.0))
     ESI    = 0.5 * E1 + 0.5 * E2
 
     # ── 5. EcSI (Economic) ────────────────────────────────────────────────────
@@ -1220,11 +1220,11 @@ def mpbsi_evaluator(
     # ── 6. TRI (Technical Reliability) ───────────────────────────────────────
     T1         = 1.0           # LPSP gate already passed
     T2         = Aut_factor    # = 1.0
-    # T3: real redundancy score — normalised to mission doctrine (7-day autonomy).
-    # Old formula 1-exp(-redundancy/3) never reaches 1.0 even when autonomy
-    # far exceeds the 7-day requirement. Physical reality: if the system can
-    # sustain ≥7 days without any renewable input, redundancy is fully met.
-    T3         = min(sim.autonomy_days / 7.0, 1.0)
+    # T3: MATLAB exact — continuous gradient for PSO optimisation.
+    # 1-exp(-redundancy/3) never fully saturates so PSO always has incentive
+    # to improve storage/FC, driving better balanced designs.
+    redundancy = x[2] / 1000.0 + x[5] / 100.0
+    T3         = 1.0 - np.exp(-redundancy / 3.0)
     TRI        = 0.6 * T1 + 0.2 * T2 + 0.2 * T3
 
     # ── 7. ORI (Operational Resilience) ──────────────────────────────────────
@@ -1450,14 +1450,15 @@ def mpbsi_evaluator_resource(
 
     # ── ESI ──────────────────────────────────────────────────────────────────
     E1 = 1.0
-    # E2: real coverage — demand fully met by RES = 1.0
-    E2 = min(Annual_RES, Annual_Load) / max(Annual_Load, 1e-9)
-    # E3: curtailment relative to actual load (not generation)
+    # E2: MATLAB exact — penalises surplus (keeps PSO from oversizing)
+    E2_raw = Annual_RES / max(Annual_Load, 1e-9)
+    E2 = 1.0 / (1.0 + abs(E2_raw - 1.0))
+    # E3: curtailment relative to generation (MATLAB exact)
     Curt = sim.curtailed_semi_MWh + sim.curtailed_non_MWh
-    Curt_ratio = Curt / max(Annual_Load, 1e-6)
-    E3 = max(1.0 - Curt_ratio, 0.0)
-    # E4: real storage adequacy normalised to 1.5-day reference
-    E4 = min(storage_ratio / 1.5, 1.0)
+    Curt_ratio = Curt / max(Annual_RES, 1e-6)
+    E3 = 1.0 - Curt_ratio
+    # E4: MATLAB exact exponential saturation
+    E4 = 1.0 - np.exp(-storage_ratio / 3.0)
     ESI = 0.30*E1 + 0.30*E2 + 0.20*E3 + 0.20*E4
 
     # ── EcSI ─────────────────────────────────────────────────────────────────
@@ -1473,13 +1474,11 @@ def mpbsi_evaluator_resource(
 
     # ── TRI ──────────────────────────────────────────────────────────────────
     T1 = 1.0
-    # T2: normalised to 3-day target (resource/grid-tied benchmark)
-    T2 = min(sim.autonomy_days / 3.0, 1.0)
-    # T3: normalised redundancy (reference: BESS=2000kWh+FC=100kW → ratio=1)
+    # T2/T3/T4: MATLAB exact exponential saturations — continuous PSO gradient
+    T2 = 1.0 - np.exp(-sim.autonomy_days / 1.5)
     redundancy = (x[2] / 1000.0 + x[5] / 100.0)
-    T3 = min(redundancy / 3.0, 1.0)
-    # T4: normalised storage ratio (1.5-day reference)
-    T4 = min(storage_ratio / 1.5, 1.0)
+    T3 = 1.0 - np.exp(-redundancy / 3.0)
+    T4 = 1.0 - np.exp(-storage_ratio / 3.0)
     TRI = 0.40*T1 + 0.30*T2 + 0.20*T3 + 0.10*T4
 
     # ── ORI ──────────────────────────────────────────────────────────────────
