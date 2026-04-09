@@ -428,26 +428,13 @@ with st.sidebar:
     # PSO hyper-parameters fixed to MATLAB defaults (not exposed in UI)
     pso_w = 0.8; pso_wdamp = 0.98; pso_c1 = 1.5; pso_c2 = 1.5
     seed  = 16  # MATLAB exact: rng(16) for PSO (both resource and mission)
-
-    # ── MATLAB result mat files ──────────────────────────────────────────────
-    uploaded_pareto = None
-
-    uploaded_pareto = None  # No mat upload needed — Python matches MATLAB natively
-
     st.markdown("##### 🏗️ Site Parameters")
     land_m2 = st.number_input(
         "Available Land Area (m²)",
-        min_value=1000, max_value=500_000, value=8_000, step=1000,
-        help=(
-            "Physics-derived bounds: PV_max=Land/10 kWp, Wind_max=Land/15 kW.\n\n"
-            "8000 m² = MATLAB reference (Akhnoor site) → results match MATLAB exactly.\n"
-            "Change this to model a different site's land constraint."
-        )
+        min_value=1000, max_value=500_000, value=50_000, step=1000,
+        help="Used to compute physics-derived PSO bounds (MATLAB: PV_max=Land/10, Wind_max=Land/15)"
     )
-    if abs(land_m2 - 8000) < 100:
-        st.caption(f"→ PV_max={land_m2//10:,} kWp | Wind_max={land_m2//15:,} kW  ✅ Matches MATLAB reference (8000 m²)")
-    else:
-        st.caption(f"→ PV_max={land_m2//10:,} kWp | Wind_max={land_m2//15:,} kW  ⚠️ Custom land (MATLAB ref = 8000 m²)")
+    st.caption(f"→ PV_max ≈ {land_m2//10:,} kWp | Wind_max ≈ {land_m2//15:,} kW")
 
     st.divider()
 
@@ -582,111 +569,48 @@ if html_file.exists():
     html_raw = html_file.read_text(encoding="utf-8")
 
     # ── Inject sidebar file into HTML iframe ──────────────────────────────────
-    # Backend computes step1-4 (exact MATLAB) and injects values — no JS approximation.
     file_inject_script = ""
     if uploaded_file is not None:
-        import base64, tempfile as _tf, os as _os, json as _json
-        file_b64  = base64.b64encode(uploaded_file.getvalue()).decode("utf-8")
+        import base64
+        file_b64 = base64.b64encode(uploaded_file.getvalue()).decode("utf-8")
         file_name = uploaded_file.name.replace("\\", "\\\\").replace("`", "\\`").replace("$", "\\$")
-
-        # ── Compute exact MATLAB step1-4 values ───────────────────────────
-        _file_stats = {}
-        try:
-            from mpbsi_backend import step1_load_data, step2_solar_model, step3_wind_model, step4_hybrid_generation
-            import numpy as _np
-            _suffix = Path(uploaded_file.name).suffix
-            _tmp = _tf.NamedTemporaryFile(delete=False, suffix=_suffix)
-            _tmp.write(uploaded_file.getvalue()); _tmp.close()
-            _base = step1_load_data(_tmp.name)
-            _sol  = step2_solar_model(_base)
-            _wnd  = step3_wind_model(_base)
-            _hyb  = step4_hybrid_generation(_base, _sol, _wnd)
-            _file_stats = {
-                "N":                int(_base.N),
-                "avg_load":         round(float(_np.mean(_base.load)), 2),
-                "peak_load":        round(float(_np.max(_base.load)), 2),
-                "avg_ghi_kw":       round(float(_np.mean(_base.ghi)) / 1000.0, 4),
-                "avg_wind":         round(float(_np.mean(_base.wind_speed)), 2),
-                "annual_load_MWh":  round(float(_np.sum(_base.load)) / 1000.0, 2),
-                "annual_solar_MWh": round(float(_sol.annual_solar_MWh), 2),
-                "annual_wind_MWh":  round(float(_wnd.annual_wind_MWh), 2),
-                "annual_hybrid_MWh":round(float(_hyb.annual_hybrid_MWh), 2),
-                "renewable_adequacy":round(float(_hyb.renewable_adequacy), 4),
-                "N_modules":        int(_sol.N_modules),
-                "pv_capacity_kWp":  round(float(_sol.pv_capacity_kWp), 2),
-                "wind_capacity_kW": round(float(_wnd.wind_capacity_kW), 2),
-            }
-            _os.unlink(_tmp.name)
-        except Exception as _e:
-            _file_stats = {"error": str(_e)}
-
-        _stats_json = _json.dumps(_file_stats).replace("\\", "\\\\").replace("`", "\\`").replace("$", "\\$")
-
         file_inject_script = f"""
 <script>
 (function(){{
-    var _bs = JSON.parse(`{_stats_json}`);
-    function applyStats() {{
-        if (!_bs || _bs.error) return;
-        var s = function(id,v){{ var e=document.getElementById(id); if(e) e.textContent=v; }};
-        var sv= function(id,v){{ var e=document.getElementById(id); if(e) e.value=v; }};
-        s('sum_rows',        _bs.N ? _bs.N.toLocaleString() : '—');
-        s('sum_avg_load',    _bs.avg_load != null ? _bs.avg_load.toFixed(2) : '');
-        s('sum_peak_load',   _bs.peak_load != null ? _bs.peak_load.toFixed(2) : '');
-        s('sum_avg_solar',   _bs.avg_ghi_kw != null ? _bs.avg_ghi_kw.toFixed(4) : '');
-        s('sum_avg_wind',    _bs.avg_wind != null ? _bs.avg_wind.toFixed(2) : '');
-        s('sum_annual',      _bs.annual_load_MWh != null ? _bs.annual_load_MWh.toFixed(2) : '');
-        s('calc_avg_load',   _bs.avg_load != null ? _bs.avg_load.toFixed(2) : '');
-        s('calc_avg_load_2', _bs.avg_load != null ? _bs.avg_load.toFixed(2) : '');
-        s('calc_peak_load',  _bs.peak_load != null ? _bs.peak_load.toFixed(2) : '');
-        s('calc_peak_load_2',_bs.peak_load != null ? _bs.peak_load.toFixed(2) : '');
-        s('calc_annual',     _bs.annual_load_MWh != null ? _bs.annual_load_MWh.toFixed(2) : '');
-        s('calc_avg_solar',  _bs.avg_ghi_kw != null ? _bs.avg_ghi_kw.toFixed(4) : '');
-        s('calc_avg_wind',   _bs.avg_wind != null ? _bs.avg_wind.toFixed(2) : '');
-        sv('peak_load_input',  _bs.peak_load != null ? _bs.peak_load.toFixed(2) : '');
-        sv('avg_load_input',   _bs.avg_load != null ? _bs.avg_load.toFixed(2) : '');
-        sv('annual_demand',    _bs.annual_load_MWh != null ? _bs.annual_load_MWh.toFixed(2) : '');
-        s('sum_solar_mwh',  _bs.annual_solar_MWh != null ? _bs.annual_solar_MWh.toFixed(2) : '');
-        s('sum_wind_mwh',   _bs.annual_wind_MWh  != null ? _bs.annual_wind_MWh.toFixed(2)  : '');
-        s('sum_hybrid_mwh', _bs.annual_hybrid_MWh != null ? _bs.annual_hybrid_MWh.toFixed(2) : '');
-        var adq = _bs.renewable_adequacy || 0;
-        var ae  = document.getElementById('sum_adequacy');
-        if (ae) {{ ae.textContent = adq.toFixed(3); ae.style.color = adq>=1?'#38ef7d':adq>=0.8?'#FFD700':'#ff6b6b'; }}
-        window.__backendCardsSet = true;
-    }}
-    if (document.readyState === 'complete') {{ applyStats(); setTimeout(applyStats, 600); }}
-    else {{ window.addEventListener('load', function(){{ applyStats(); setTimeout(applyStats,600); }}); }}
     function tryInjectFile() {{
-        if (window.receiveFileFromSidebar) {{ window.receiveFileFromSidebar(`{file_b64}`, `{file_name}`); }}
-        else {{ setTimeout(tryInjectFile, 300); }}
+        if (window.receiveFileFromSidebar) {{
+            window.receiveFileFromSidebar(`{file_b64}`, `{file_name}`);
+        }} else {{
+            setTimeout(tryInjectFile, 300);
+        }}
     }}
     if (document.readyState === 'complete') {{ setTimeout(tryInjectFile, 500); }}
-    else {{ window.addEventListener('load', function(){{ setTimeout(tryInjectFile, 500); }}); }}
+    else {{ window.addEventListener('load', function() {{ setTimeout(tryInjectFile, 500); }}); }}
 }})();
 </script>"""
 
     results_in_session = st.session_state.get("mpbsi_results")
     if results_in_session:
         try:
-            import base64 as _b64
-            payload_json   = json.dumps(results_in_session, default=str)
-            # Base64-encode the JSON to avoid ALL escaping issues with backticks/dollars/$
-            payload_b64    = _b64.b64encode(payload_json.encode("utf-8")).decode("ascii")
+            payload_json    = json.dumps(results_in_session, default=str)
+            payload_escaped = (payload_json
+                               .replace("\\", "\\\\")
+                               .replace("`",  "\\`")
+                               .replace("$",  "\\$"))
             inject_script = f"""
 <script>
 (function(){{
     function tryInject() {{
         if (window.receiveBackendResults) {{
             try {{
-                var raw  = atob("{payload_b64}");
-                var data = JSON.parse(raw);
+                var data = JSON.parse(`{payload_escaped}`);
                 window.receiveBackendResults(data);
                 console.log('✅ MPBSI injected, MPBSI=', data&&data.optimization?data.optimization.best_mpbsi:'?');
-            }} catch(e) {{ console.error('MPBSI inject error:', e); }}
-        }} else {{ setTimeout(tryInject, 200); }}
+            }} catch(e) {{ console.error('inject error:', e); }}
+        }} else {{ setTimeout(tryInject, 300); }}
     }}
-    if (document.readyState === 'complete') {{ setTimeout(tryInject, 800); }}
-    else {{ window.addEventListener('load', function() {{ setTimeout(tryInject, 800); }}); }}
+    if (document.readyState === 'complete') {{ setTimeout(tryInject, 400); }}
+    else {{ window.addEventListener('load', function() {{ setTimeout(tryInject, 400); }}); }}
 }})();
 </script>"""
             if "</body>" in html_raw:
@@ -1633,18 +1557,6 @@ if run_btn:
         tmp.write(uploaded_file.getvalue())
         tmp.close()
         dataset_path = tmp.name
-
-        # ── Save NSGA Pareto mat alongside the dataset ───────────────────────
-        if uploaded_pareto is not None:
-            _pareto_path = os.path.join(
-                os.path.dirname(dataset_path),
-                uploaded_pareto.name
-            )
-            with open(_pareto_path, "wb") as _pf:
-                _pf.write(uploaded_pareto.getvalue())
-            st.info(f"📊 Pareto mat loaded — Cases A/B/C will match MATLAB exactly")
-
-
     else:
         st.error("❌ No dataset uploaded. Please upload a file before running.")
         st.stop()

@@ -495,9 +495,9 @@
         <span id="mode_check_mission"></span>
         <span id="mode_check_resource"></span>
         <!-- Weights -->
-        <input type="hidden" id="w_esi"  value="0.15">
+        <input type="hidden" id="w_esi"  value="0.10">
         <input type="hidden" id="w_ecsi" value="0.25">
-        <input type="hidden" id="w_tri"  value="0.30">
+        <input type="hidden" id="w_tri"  value="0.25">
         <input type="hidden" id="w_ori"  value="0.15">
         <input type="hidden" id="w_lsi"  value="0.15">
         <!-- Weight labels (setMode updates these) -->
@@ -518,19 +518,19 @@
         <input type="hidden" id="min_autonomy"   value="7">
         <input type="hidden" id="land_area_input" value="50000">
         <span id="constraint_autonomy"></span>
-        <!-- Bounds (physics-derived via Streamlit, these are fallback defaults) -->
-        <input type="hidden" id="pv_min"   value="300">
-        <input type="hidden" id="pv_max"   value="5000">
-        <input type="hidden" id="wind_min" value="0">
-        <input type="hidden" id="wind_max" value="3333">
-        <input type="hidden" id="batt_min" value="10000">
-        <input type="hidden" id="batt_max" value="65000">
-        <input type="hidden" id="elec_min" value="50">
-        <input type="hidden" id="elec_max" value="500">
-        <input type="hidden" id="h2_min"   value="10000">
-        <input type="hidden" id="h2_max"   value="80000">
-        <input type="hidden" id="fc_min"   value="100">
-        <input type="hidden" id="fc_max"   value="600">
+        <!-- Bounds: empty → backend always uses physics-derived MATLAB-exact bounds -->
+        <input type="hidden" id="pv_min"   value="">
+        <input type="hidden" id="pv_max"   value="">
+        <input type="hidden" id="wind_min" value="">
+        <input type="hidden" id="wind_max" value="">
+        <input type="hidden" id="batt_min" value="">
+        <input type="hidden" id="batt_max" value="">
+        <input type="hidden" id="elec_min" value="">
+        <input type="hidden" id="elec_max" value="">
+        <input type="hidden" id="h2_min"   value="">
+        <input type="hidden" id="h2_max"   value="">
+        <input type="hidden" id="fc_min"   value="">
+        <input type="hidden" id="fc_max"   value="">
         <!-- Cost inputs (MATLAB defaults) -->
         <input type="hidden" id="cost_pv"      value="55000">
         <input type="hidden" id="cost_wind"    value="120000">
@@ -557,10 +557,10 @@
             <button class="tab active" onclick="switchTab('initial_sizing')">📋 Summary</button>
             <button class="tab" id="tab_btn_running" onclick="switchTab('running')" style="display:none;">⚡ Running...</button>
             <button class="tab" onclick="switchTab('results')">📈 Results</button>
-            <button class="tab" onclick="switchTab('steps_detail')">🔬 10-Step Analysis</button>
             <button class="tab" onclick="switchTab('graphs')">📉 Graphs</button>
             <button class="tab" onclick="switchTab('pillars')">🏛️ Pillars</button>
             <button class="tab" onclick="switchTab('costs_report')" id="tab_btn_costs">💼 Costs &amp; Report</button>
+            <button class="tab" onclick="switchTab('h2_logistics')" id="tab_btn_h2">⛽ H₂ Logistics</button>
         </div>
 
         <!-- SUMMARY TAB -->
@@ -628,7 +628,38 @@
                             <div style="font-size:2em; font-weight:700; color:#c4b5fd; font-family:'JetBrains Mono',monospace;" id="sum_rows">—</div>
                             <div style="font-size:0.78em; color:#8b9dc3; margin-top:4px;">hourly rows</div>
                         </div>
+                        <div style="background:rgba(255,215,0,0.10); border:1px solid rgba(255,215,0,0.30); border-radius:12px; padding:18px; text-align:center;">
+                            <div style="font-size:0.75em; color:#a0a8d4; letter-spacing:1px; text-transform:uppercase; margin-bottom:8px;">☀️ Annual Solar Generation <span style="font-size:0.85em;opacity:0.7;">(500 kWp)</span></div>
+                            <div style="font-size:2em; font-weight:700; color:#FFD700; font-family:'JetBrains Mono',monospace;" id="sum_solar_mwh">—</div>
+                            <div style="font-size:0.78em; color:#8b9dc3; margin-top:4px;">MWh / year</div>
+                        </div>
+                        <div style="background:rgba(0,191,255,0.10); border:1px solid rgba(0,191,255,0.30); border-radius:12px; padding:18px; text-align:center;">
+                            <div style="font-size:0.75em; color:#a0a8d4; letter-spacing:1px; text-transform:uppercase; margin-bottom:8px;">🌬️ Annual Wind Generation <span style="font-size:0.85em;opacity:0.7;">(200 kW)</span></div>
+                            <div style="font-size:2em; font-weight:700; color:#00BFFF; font-family:'JetBrains Mono',monospace;" id="sum_wind_mwh">—</div>
+                            <div style="font-size:0.78em; color:#8b9dc3; margin-top:4px;">MWh / year</div>
+                        </div>
+                        <div style="background:rgba(56,239,125,0.10); border:1px solid rgba(56,239,125,0.30); border-radius:12px; padding:18px; text-align:center;">
+                            <div style="font-size:0.75em; color:#a0a8d4; letter-spacing:1px; text-transform:uppercase; margin-bottom:8px;">⚡ Annual Hybrid Generation <span style="font-size:0.85em;opacity:0.7;">(500+200)</span></div>
+                            <div style="font-size:2em; font-weight:700; color:#38ef7d; font-family:'JetBrains Mono',monospace;" id="sum_hybrid_mwh">—</div>
+                            <div style="font-size:0.78em; color:#8b9dc3; margin-top:4px;">MWh / year</div>
+                        </div>
+                        <div style="background:rgba(167,139,250,0.10); border:1px solid rgba(167,139,250,0.30); border-radius:12px; padding:18px; text-align:center;">
+                            <div style="font-size:0.75em; color:#a0a8d4; letter-spacing:1px; text-transform:uppercase; margin-bottom:8px;">✅ Renewable Adequacy <span style="font-size:0.85em;opacity:0.7;">(site ref.)</span></div>
+                            <div style="font-size:2em; font-weight:700; font-family:'JetBrains Mono',monospace; color:#a78bfa;" id="sum_adequacy">—</div>
+                            <div style="font-size:0.78em; color:#8b9dc3; margin-top:4px;">ratio (≥ 1.0 = adequate)</div>
+                        </div>
                     </div>
+                </div>
+
+                <!-- Generation cards context note -->
+                <div style="background:rgba(102,126,234,0.08);border:1px solid rgba(102,126,234,0.2);
+                            border-radius:8px;padding:10px 16px;margin:8px 0 4px 0;
+                            font-size:0.78em;color:#8b9dc3;font-family:var(--mono);">
+                    ℹ️ <strong style="color:#a78bfa;">Site Assessment</strong> at standard sizing:
+                    <strong style="color:#FFD700;">500 kWp PV</strong> ·
+                    <strong style="color:#00BFFF;">200 kW Wind</strong> — fixed reference for site comparison.
+                    After optimization, the <strong style="color:#38ef7d;">Performance Summary</strong> shows
+                    the actual generation from the optimizer's chosen system size.
                 </div>
 
                 <!-- Monthly breakdown chart -->
@@ -879,16 +910,6 @@
             
         </div>
 
-        <!-- 10-STEP ANALYSIS TAB -->
-        <div id="steps_detail" class="tab-content">
-            <div class="card full-width" id="steps_detail_container">
-                <h2>🔬 10-Step Pipeline Analysis</h2>
-                <div class="info-box">
-                    <p>Run the pipeline first to see per-step results. Each step corresponds exactly to a MATLAB file.</p>
-                </div>
-            </div>
-        </div>
-
         <!-- COSTS & REPORT TAB -->
         <div id="costs_report" class="tab-content">
 
@@ -1007,17 +1028,17 @@
             <div class="card full-width">
                 <h2>🏛️ MPBSI — Five Sustainability Pillars</h2>
                 <div class="info-box">
-                    <p>MPBSI integrates five mission-critical dimensions. Weights reflect military priority: TRI dominates (30%), EcSI second (25%) since long-run cost determines force sustainability. All weights are adjustable in the Optimise tab.</p>
+                    <p>MPBSI integrates five mission-critical dimensions. Weights reflect military priority: TRI and ORI share (25% each) for reliability and operational resilience, EcSI (20%) covers lifecycle cost. All weights are adjustable in the Optimise tab.</p>
                     <p style="margin-top:8px;font-family:var(--mono);font-size:0.82em;color:var(--text2);">
-                        Default: TRI=0.30 · EcSI=0.25 · ORI=0.15 · LSI=0.15 · ESI=0.15
+                        Mission: ESI=0.10 · EcSI=0.20 · TRI=0.25 · ORI=0.25 · LSI=0.20  |  Resource: ESI=0.05 · EcSI=0.20 · TRI=0.30 · ORI=0.25 · LSI=0.20
                     </p>
                 </div>
             </div>
 
             <div class="card">
-                <h2 data-pillar="TRI">TRI — Tactical Resilience Index (<span class="pillar-weight" id="tri-weight">30</span>%)</h2>
+                <h2 data-pillar="TRI">TRI — Tactical Resilience Index (<span class="pillar-weight" id="tri-weight">25</span>%)</h2>
                 <div style="background:rgba(0,180,216,0.06);border:1px solid rgba(0,180,216,0.2);border-radius:4px;padding:12px 16px;margin:12px 0;font-family:var(--mono);font-size:0.88em;color:var(--accent);text-align:center;">
-                    TRI = 0.25×LPSP_score + 0.25×Autonomy_score + 0.25×Availability + 0.25×Storage_margin
+                    Mission: TRI = 0.5×T1 + 0.2×T2(Aut_factor) + 0.2×T3(redundancy) + 0.1×EL_factor  |  EL_factor=exp(-|EL_util−0.20|) [20% CF target]  |  Resource: 0.40×T1+0.30×T2+0.20×T3+0.10×T4
                 </div>
                 <div class="info-box">
                     <p><strong>LPSP Score:</strong> (1 − LPSP_critical) — zero tolerance policy enforced</p>
@@ -1030,7 +1051,7 @@
             <div class="card">
                 <h2 data-pillar="EcSI">EcSI — Economic Sustainability Index (<span class="pillar-weight" id="ecsi-weight">25</span>%)</h2>
                 <div style="background:rgba(244,163,0,0.06);border:1px solid rgba(244,163,0,0.2);border-radius:4px;padding:12px 16px;margin:12px 0;font-family:var(--mono);font-size:0.88em;color:var(--gold);text-align:center;">
-                    EcSI = max(0, min(1, 1 − LCOE / ₹42))
+                    Mission: EcSI = 0.5×C1 + 0.5×C2  |  C1=1/(1+LCOE/₹26/kWh diesel ref)  C2=1/(1+CAPEX/₹1Cr)  |  Resource adds C3(O&M/kWh) + C4
                 </div>
                 <div class="info-box">
                     <p><strong>CAPEX:</strong> Σ(Component_size × Unit_cost)</p>
@@ -1044,7 +1065,7 @@
             <div class="card">
                 <h2 data-pillar="ORI">ORI — Operational Reliability Index (<span class="pillar-weight" id="ori-weight">15</span>%)</h2>
                 <div style="background:rgba(0,180,216,0.06);border:1px solid rgba(0,180,216,0.2);border-radius:4px;padding:12px 16px;margin:12px 0;font-family:var(--mono);font-size:0.88em;color:var(--accent);text-align:center;">
-                    ORI = 0.30×Critical_surv + 0.30×Decentral + 0.20×Signature + 0.20×Blackstart
+                    Mission: ORI = 0.3×R1(Aut_factor) + 0.3×R2(gen_mix) + 0.2×R3(FC_resilience) + 0.2×H2_factor  |  Resource: 0.35×R1 + 0.25×R2 + 0.20×R3 + 0.20×R4
                 </div>
                 <div class="info-box">
                     <p><strong>Critical Survivability:</strong> (1 − LPSP_critical) — Step 7 / Step 10 result</p>
@@ -1057,7 +1078,7 @@
             <div class="card">
                 <h2 data-pillar="LSI">LSI — Logistics Support Index (<span class="pillar-weight" id="lsi-weight">15</span>%)</h2>
                 <div style="background:rgba(0,180,216,0.06);border:1px solid rgba(0,180,216,0.2);border-radius:4px;padding:12px 16px;margin:12px 0;font-family:var(--mono);font-size:0.88em;color:var(--accent);text-align:center;">
-                    LSI = 0.25×Fuel_elim + 0.20×Auto_support + 0.20×Maintenance + 0.15×Storage_life + 0.20×Supply
+                    Mission: LSI = 0.3×L1(Aut_factor) + 0.3×L2(cost_index) + 0.2×L3(battery_score) + 0.2×H2_factor  |  Resource: 0.25×L1 + 0.25×L2 + 0.20×L3 + 0.15×L4 + 0.15×L5
                 </div>
                 <div class="info-box">
                     <p><strong>Fuel Elimination:</strong> 1.0 — no diesel supply chain (Akhnoor convoy risk eliminated)</p>
@@ -1069,9 +1090,9 @@
             </div>
 
             <div class="card">
-                <h2 data-pillar="ESI">ESI — Energy Security Index (<span class="pillar-weight" id="esi-weight">15</span>%)</h2>
+                <h2 data-pillar="ESI">ESI — Energy Security Index (<span class="pillar-weight" id="esi-weight">10</span>%)</h2>
                 <div style="background:rgba(0,230,118,0.05);border:1px solid rgba(0,230,118,0.2);border-radius:4px;padding:12px 16px;margin:12px 0;font-family:var(--mono);font-size:0.88em;color:var(--green);text-align:center;">
-                    ESI = 0.30×Emission_avoid + 0.25×RES_pen + 0.25×Storage_util + 0.20×Lifecycle
+                    Mission: ESI = 0.4×E1(RES_present) + 0.4×E2(RES_balance) + 0.2×Curt_factor  |  Resource: 0.30×E1 + 0.30×E2 + 0.20×E3 + 0.20×E4
                 </div>
                 <div class="info-box">
                     <p><strong>Emission Avoidance:</strong> 1.0 — zero operational CO₂ (vs 2.68 kg/L diesel baseline)</p>
@@ -1084,7 +1105,7 @@
             <div class="card full-width">
                 <h2>Σ MPBSI Master Formula</h2>
                 <div style="background:rgba(0,180,216,0.06);border:1px solid rgba(0,180,216,0.25);border-radius:4px;padding:16px;margin:12px 0;font-family:var(--mono);font-size:1em;color:#d0e4ff;text-align:center;letter-spacing:0.04em;">
-                    MPBSI = <span id="formula-tri">0.30</span>×TRI + <span id="formula-ecsi">0.25</span>×EcSI + <span id="formula-ori">0.15</span>×ORI + <span id="formula-lsi">0.15</span>×LSI + <span id="formula-esi">0.15</span>×ESI
+                    MPBSI = <span id="formula-tri">0.25</span>×TRI + <span id="formula-ecsi">0.20</span>×EcSI + <span id="formula-ori">0.25</span>×ORI + <span id="formula-lsi">0.20</span>×LSI + <span id="formula-esi">0.10</span>×ESI
                 </div>
                 <table style="margin-top:12px">
                     <tr><th>Score Range</th><th>Grade</th><th>Mission Recommendation</th></tr>
@@ -1094,6 +1115,21 @@
                     <tr><td>0.55 – 0.65</td><td style="color:#fa8">Acceptable</td><td>Hold — improvements required before forward deployment</td></tr>
                     <tr><td>&lt; 0.55</td><td style="color:var(--red);font-weight:700">Poor</td><td>Reject — full redesign required</td></tr>
                 </table>
+            </div>
+        </div>
+
+        <div id="h2_logistics" class="tab-content">
+            <div class="card full-width">
+                <h2>⛽ Hydrogen Logistics Analysis
+                    <span id="h2_mode_badge" style="font-size:0.65em;color:#8b9dc3;font-weight:normal;margin-left:8px;"></span>
+                </h2>
+                <p style="color:#8b9dc3;font-size:0.85em;margin-bottom:18px;">
+                    Exact translation of <code>Hydrogen_Logistics_resource.m</code> — 
+                    tank sizing, autonomy, H₂ flow and NPC for PSO Global Best and all NSGA Pareto cases.
+                </p>
+                <div id="h2_logistics_content">
+                    <p style="color:#8b9dc3;font-style:italic;">Run the optimiser to generate H₂ logistics data.</p>
+                </div>
             </div>
         </div>
     </div>
@@ -1345,16 +1381,84 @@
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             const tabLabels = {
                 initial_sizing: 'Summary', running: 'Running',
-                results: 'Results', steps_detail: '10-Step', graphs: 'Graphs',
-                pillars: 'Pillars', costs_report: 'Costs'
+                results: 'Results', graphs: 'Graphs',
+                pillars: 'Pillars', costs_report: 'Costs', h2_logistics: 'H₂ Logistics'
             };
             const targetLabel = tabLabels[tabName] || tabName;
+            // Try matching by onclick attribute first (most reliable), then by text
             document.querySelectorAll('.tab').forEach(tab => {
-                if (tab.textContent.trim().includes(targetLabel)) tab.classList.add('active');
+                const onclk = tab.getAttribute('onclick') || '';
+                if (onclk.includes("'" + tabName + "'") || onclk.includes('"' + tabName + '"')) {
+                    tab.classList.add('active');
+                } else if (tab.textContent.trim().includes(targetLabel)) {
+                    tab.classList.add('active');
+                }
             });
             const target = document.getElementById(tabName);
             if (target) target.classList.add('active');
+
+            // ── Re-render Plotly charts when graphs tab becomes visible ──────────
+            // Plotly cannot measure element size when tab is display:none — re-render fixes it
+            if (tabName === 'graphs' && window.__lastResults) {
+                setTimeout(() => {
+                    generateGraphs(window.__lastResults);
+                    // Also resize any existing Plotly plots
+                    if (typeof Plotly !== 'undefined') {
+                        document.querySelectorAll('#graphs .chart-container').forEach(el => {
+                            if (el.id) try { Plotly.relayout(el.id, {}); } catch(e) {}
+                        });
+                    }
+                }, 50);
+            }
+
+            // ── Populate H2 logistics tab on first visit ─────────────────────────
+            if (tabName === 'h2_logistics' && window.__lastResults) {
+                const cont = document.getElementById('h2_logistics_content');
+                if (cont && cont.querySelector('p[style*="italic"]')) {
+                    // Still showing placeholder — populate now
+                    populateH2LogisticsTab(window.__lastResults);
+                }
+            }
         }
+
+        // ══════════════════════════════════════════════════════════════════
+        //  AUTO-RESIZE PLOTLY WHEN GRAPHS TAB BECOMES VISIBLE
+        //  MutationObserver watches for 'active' class on graphs tab div
+        // ══════════════════════════════════════════════════════════════════
+        (function() {
+            function onGraphsVisible() {
+                if (!window.__lastResults) return;
+                // Re-run generateGraphs so Plotly gets correct dimensions
+                generateGraphs(window.__lastResults);
+            }
+            // Watch for the graphs div getting the 'active' class
+            const graphsDiv = document.getElementById('graphs');
+            if (graphsDiv && window.MutationObserver) {
+                new MutationObserver((muts) => {
+                    muts.forEach(m => {
+                        if (m.attributeName === 'class' && graphsDiv.classList.contains('active')) {
+                            setTimeout(onGraphsVisible, 30);
+                        }
+                    });
+                }).observe(graphsDiv, { attributes: true, attributeFilter: ['class'] });
+            }
+            // Same for H2 logistics tab
+            const h2Div = document.getElementById('h2_logistics');
+            if (h2Div && window.MutationObserver) {
+                new MutationObserver((muts) => {
+                    muts.forEach(m => {
+                        if (m.attributeName === 'class' && h2Div.classList.contains('active')) {
+                            if (window.__lastResults) {
+                                const cont = document.getElementById('h2_logistics_content');
+                                if (cont && cont.querySelector('p[style*="italic"]')) {
+                                    populateH2LogisticsTab(window.__lastResults);
+                                }
+                            }
+                        }
+                    });
+                }).observe(h2Div, { attributes: true, attributeFilter: ['class'] });
+            }
+        })();
 
         // ══════════════════════════════════════════════════════════════════
         //  COLLAPSIBLE PANELS
@@ -1407,7 +1511,7 @@
 
         // ── Mode selector ─────────────────────────────────────────────────────
         const MODE_WEIGHTS = {
-            mission:  { ESI: 0.15, EcSI: 0.25, TRI: 0.30, ORI: 0.15, LSI: 0.15 },  // MATLAB PSO_MPBSI_Mission
+            mission:  { ESI: 0.10, EcSI: 0.20, TRI: 0.25, ORI: 0.25, LSI: 0.20 },  // MATLAB MPBSI_Evaluator_Mission_Land.m
             resource: { ESI: 0.05, EcSI: 0.20, TRI: 0.30, ORI: 0.25, LSI: 0.20 },  // MATLAB PSO_MPBSI_Resource
         };
         const MODE_LABELS = {
@@ -1650,6 +1754,8 @@
         }
 
         function processUploadedRows(rows, filename) {
+            // Reset guard so JS preview shows while no backend results are loaded
+            window.__backendCardsSet = false;
             try {
                 // ── Detect columns (case-insensitive) ──
                 if (!rows || rows.length === 0) { alert('File is empty.'); hideLoading(); return; }
@@ -1684,6 +1790,8 @@
                                           'wind_mps','wind_ms','Wind','wind','wind_speed');
                 const colLoad  = findCol('Load_kW','load_kW','Load_KW','Demand_kW','Power_kW',
                                           'Load','load','Demand','Power','Consumption');
+                const colTemp  = findCol('Temperature_C','Temp_C','Temperature','Ambient_C',
+                                          'AmbientTemp','temp_c','temperature','Tamb');
 
                 if (!colSolar || !colWind || !colLoad) {
                     alert('Required columns not found.\nExpected: GHI_Wh_m2, WindSpeed_10m_mps, Load_kW\nFound: ' + keys.join(', '));
@@ -1695,6 +1803,9 @@
                 const solar = rows.map(r => parseFloat(r[colSolar]) || 0);
                 const wind  = rows.map(r => parseFloat(r[colWind])  || 0);
                 const load  = rows.map(r => parseFloat(r[colLoad])  || 0);
+                const temp  = colTemp
+                    ? rows.map(r => parseFloat(r[colTemp]) || 25)
+                    : new Array(rows.length).fill(25);  // fallback 25°C
 
                 // ── Unit auto-detection (mirrors mpbsi_backend.py exactly) ──
                 // GHI: if peak ≤ 10 → data is in kW/m² or kWh/m² → keep as kW/m² for display
@@ -1744,6 +1855,63 @@
                 setEl('sum_avg_load',   avgLoad.toFixed(2));
                 setEl('sum_annual',     annual.toFixed(2));
                 setEl('sum_rows',       N.toLocaleString());
+
+                // ── Annual Solar / Wind / Hybrid / Adequacy ──────────────────────
+                // Uses pipeline defaults: PV=500 kWp, Wind=200 kW (backend cfg defaults)
+                // Exact MATLAB step2/step3 models → matches terminal output exactly
+                {
+                    const PV_kWp  = 500.0;   // backend default: cfg["pv_kWp"] = 500
+                    const Wind_kW = 200.0;   // backend default: cfg["wind_kW"] = 200
+                    const KT      = -0.004;  // PV temperature coefficient
+                    const etaPV   = 0.95;    // PV module efficiency
+
+                    // Step 2: Solar — MATLAB Step2_Solar_Model.m exact (module-based)
+                    // NSolarPV = ceil(PV_kWp*1000 / PSolarPV_ref)   MATLAB: ceil((PV_capacity*1000)/PSolarPV_ref)
+                    // PSolarPV = PSolarPV_ref × (GHI/Gref) × (1 + KT×(Tcell-25))  [W per module]
+                    // P_pv     = PSolarPV × NSolarPV × etaSolarPV / 1000            [kW array]
+                    // Unit normalisation: backend converts kW/m² → Wh/m² (×1000) when peak≤10
+                    // Mirror that here so formula always receives GHI in Wh/m²
+                    const _ghiScale = solarIsWh ? 1.0 : 1000.0;  // kW/m² → Wh/m²
+                    const PSolarPV_ref = 550.0;   // W — rated module power (MATLAB)
+                    const NSolarPV = Math.ceil(PV_kWp * 1000.0 / PSolarPV_ref);  // 910 modules for 500 kWp
+                    let _sKWh = 0;
+                    for (let i = 0; i < N; i++) {
+                        const g  = solar[i] * _ghiScale;                // Wh/m² (unit-normalised)
+                        const tc = temp[i] + 0.0256 * g;                // cell temperature °C
+                        const pMod = PSolarPV_ref * (g / 1000) * (1 + KT * (tc - 25));  // W per module
+                        _sKWh += Math.max(0, pMod) * NSolarPV * etaPV / 1000;   // kWh
+                    }
+                    const _sMWh = _sKWh / 1000;
+
+                    // Step 3: Wind — MATLAB step3_wind_model exact
+                    // V_ci=3, V_r=12, V_co=25 — pure cubic, NO hub-height, NO 1.05 boost
+                    let _wKWh = 0;
+                    for (let i = 0; i < N; i++) {
+                        const v = wind[i];
+                        if (v >= 3.0 && v < 25.0) {
+                            _wKWh += v < 12.0
+                                ? Wind_kW * Math.pow((v - 3.0) / (12.0 - 3.0), 3)
+                                : Wind_kW;
+                        }
+                    }
+                    const _wMWh  = _wKWh / 1000;
+                    const _hMWh  = _sMWh + _wMWh;
+                    const _adq   = annual > 0 ? _hMWh / annual : 0;
+
+                    // Only write to cards if backend results haven't already set them
+                    if (!window.__backendCardsSet) {
+                        setEl('sum_solar_mwh',  _sMWh.toFixed(2));
+                        setEl('sum_wind_mwh',   _wMWh.toFixed(2));
+                        setEl('sum_hybrid_mwh', _hMWh.toFixed(2));
+                        const _ae = document.getElementById('sum_adequacy');
+                        if (_ae) {
+                            _ae.textContent = _adq.toFixed(3);
+                            _ae.style.color = _adq >= 1.0 ? '#38ef7d' : _adq >= 0.8 ? '#FFD700' : '#ff6b6b';
+                        }
+                    }
+                }
+
+                // ── Overridden by pipeline step2/step3/step4 after run ────────
 
                 // ── Build monthly breakdown chart ──
                 try {
@@ -1936,23 +2104,17 @@
             // Collect configuration from UI inputs
             const config = {
                 // Variable bounds
-                pv_min:    parseFloat(document.getElementById('pv_min')?.value)    || 300,
-                pv_max:    parseFloat(document.getElementById('pv_max')?.value)    || 1200,
-                wind_min:  parseFloat(document.getElementById('wind_min')?.value)  || 0,
-                wind_max:  parseFloat(document.getElementById('wind_max')?.value)  || 500,
-                batt_min:  parseFloat(document.getElementById('batt_min')?.value)  || 10000,
-                batt_max:  parseFloat(document.getElementById('batt_max')?.value)  || 65000,
-                elec_min:  parseFloat(document.getElementById('elec_min')?.value)  || 50,
-                elec_max:  parseFloat(document.getElementById('elec_max')?.value)  || 500,
-                h2_min:    parseFloat(document.getElementById('h2_min')?.value)    || 10000,
-                h2_max:    parseFloat(document.getElementById('h2_max')?.value)    || 80000,
-                fc_min:    parseFloat(document.getElementById('fc_min')?.value)    || 100,
-                fc_max:    parseFloat(document.getElementById('fc_max')?.value)    || 600,
+                // Bounds: always null → backend uses MATLAB physics-derived bounds
+                bounds: {
+                    pv_min:null, pv_max:null, wind_min:null, wind_max:null,
+                    batt_min:null, batt_max:null, elec_min:null, elec_max:null,
+                    h2_min:null, h2_max:null, fc_min:null, fc_max:null
+                },
                 // MPBSI weights — read from sliders (set by setMode or user edit)
-                w_tri:  parseFloat(document.getElementById('w_tri')?.value)  ?? 0.30,
+                w_tri:  parseFloat(document.getElementById('w_tri')?.value)  ?? 0.25,
                 w_ori:  parseFloat(document.getElementById('w_ori')?.value)  ?? 0.15,
                 w_lsi:  parseFloat(document.getElementById('w_lsi')?.value)  ?? 0.15,
-                w_esi:  parseFloat(document.getElementById('w_esi')?.value)  ?? 0.15,
+                w_esi:  parseFloat(document.getElementById('w_esi')?.value)  ?? 0.10,
                 w_ecsi: parseFloat(document.getElementById('w_ecsi')?.value) ?? 0.25,
                 // Costs
                 cost_pv:      parseFloat(document.getElementById('cost_pv')?.value)      || 55000,
@@ -2018,9 +2180,12 @@
         // ══════════════════════════════════════════════════════════════════
         function displayResults(results) {
             if (!results) return;
+            window.__lastResults = results;   // cache for tab re-renders
+            window.__backendCardsSet = true;  // prevent JS file-parse from overwriting
 
-            const opt = results.optimization || results;
-            const algo = (opt.algorithm || 'PSO').toUpperCase();
+            const opt    = results.optimization || results;
+            const algo   = (opt.algorithm || 'PSO').toUpperCase();
+            const isNSGA = algo.includes('NSGA');
             const mode = results.mode || 'mission';   // "mission" or "resource"
             const modeBadgeHtml = mode === 'resource'
                 ? `<span style="display:inline-block;background:rgba(56,239,125,0.12);border:1px solid rgba(56,239,125,0.4);
@@ -2046,6 +2211,22 @@
             const step9 = steps.step9_survivability    || steps.step9_survivability_sizing || {};
             const step10= steps.step10_survivability_dispatch || {};
             const s1    = steps.step1_data             || {};
+            // Populate new meteorological generation cards from step2/3/4
+            const _s2g = steps.step2_solar  || {};
+            const _s3g = steps.step3_wind   || {};
+            const _s4g = steps.step4_hybrid || {};
+            if (_s4g.annual_hybrid_MWh !== undefined) {
+                const setElR = (id, val) => { const e = document.getElementById(id); if(e) e.textContent = val; };
+                setElR('sum_solar_mwh',  (_s4g.annual_solar_MWh  || _s2g.annual_solar_MWh  || 0).toFixed(2));
+                setElR('sum_wind_mwh',   (_s4g.annual_wind_MWh   || _s3g.annual_wind_MWh   || 0).toFixed(2));
+                setElR('sum_hybrid_mwh', (_s4g.annual_hybrid_MWh || 0).toFixed(2));
+                const adq = parseFloat(_s4g.renewable_adequacy || 0);
+                const adqEl = document.getElementById('sum_adequacy');
+                if (adqEl) {
+                    adqEl.textContent = adq.toFixed(3);
+                    adqEl.style.color = adq >= 1.0 ? '#38ef7d' : adq >= 0.8 ? '#FFD700' : '#ff6b6b';
+                }
+            }
             const s2    = steps.step2_solar            || {};
             const s3    = steps.step3_wind             || {};
             const s4    = steps.step4_hybrid           || {};
@@ -2057,6 +2238,17 @@
             const pillarColors = {
                 ESI:'#38ef7d', EcSI:'#FFD700', TRI:'#667eea', ORI:'#00BFFF', LSI:'#ff9f43'
             };
+
+            // getWeight: reads from results.weights_used (set by backend)
+            const _wu = results.weights_used || {};
+            const _wMap = {
+                ESI:  Math.round((_wu.w_esi  || 0.10) * 100),
+                EcSI: Math.round((_wu.w_ecsi || 0.20) * 100),
+                TRI:  Math.round((_wu.w_tri  || 0.30) * 100),
+                ORI:  Math.round((_wu.w_ori  || 0.25) * 100),
+                LSI:  Math.round((_wu.w_lsi  || 0.20) * 100),
+            };
+            const getWeight = (k) => _wMap[k] || 0;
 
             const pillarHtml = Object.entries(pillars).map(([k, v]) => {
                 const score = typeof v === 'number' ? v : 0;
@@ -2092,14 +2284,14 @@
 
             // ── Autonomy: backend is single source of truth (MATLAB-exact formula) ──
             // MATLAB: autonomy = (usable_batt + E_H2_max×η_FC) / critical_daily
-            //         usable_batt   = (SOC_max - SOC_min) = 0.6 × E_BESS
+            //         usable_batt   = (0.95-0.20)×BESS = 0.75×BESS  (MATLAB NSGA_MASTER_RESOURCE)
             //         critical_daily = Σ(0.6×Load) / 365
             const battKWh   = Array.isArray(bestX) ? (parseFloat(bestX[2]) || 0) : 0;
             const h2KWh     = Array.isArray(bestX) ? (parseFloat(bestX[4]) || 0) : 0;
 
             // Usable energy for display breakdown (MATLAB formula components)
             // MATLAB: usable_battery = SOC_max - SOC_min = E_BESS×1.0 - E_BESS×0.2 = 0.8×E_BESS
-            const battEffKWh = (1.0 - 0.2) * battKWh;               // SOC_max - SOC_min = 0.8×BESS
+            const battEffKWh = (0.95 - 0.20) * battKWh;             // MATLAB NSGA_MASTER: (0.95-0.20)×BESS = 0.75×BESS
             const h2EffKWh   = h2KWh * eta_FC;                       // E_H2_max × η_FC
 
             // Critical daily load for display
@@ -2124,17 +2316,22 @@
                         ${isFeasible ? '✓ FEASIBLE SOLUTION FOUND' : '✗ NO FEASIBLE SOLUTION IN SEARCH SPACE'}
                     </div>
                     <div style="margin-top:10px; font-size:0.75em; color:#8b9dc3; font-family:var(--mono);">
-                        ⚖️ Weights used in PSO:&nbsp;
-                        ESI <strong style="color:#38ef7d;">${((results.weights_used?.w_esi??0.15)*100).toFixed(0)}%</strong> ·
+                        ⚖️ Weights used in ${algo}:&nbsp;
+                        ESI <strong style="color:#38ef7d;">${((results.weights_used?.w_esi??0.10)*100).toFixed(0)}%</strong> ·
                         EcSI <strong style="color:#FFD700;">${((results.weights_used?.w_ecsi??0.25)*100).toFixed(0)}%</strong> ·
-                        TRI <strong style="color:#667eea;">${((results.weights_used?.w_tri??0.30)*100).toFixed(0)}%</strong> ·
+                        TRI <strong style="color:#667eea;">${((results.weights_used?.w_tri??0.25)*100).toFixed(0)}%</strong> ·
                         ORI <strong style="color:#00BFFF;">${((results.weights_used?.w_ori??0.15)*100).toFixed(0)}%</strong> ·
                         LSI <strong style="color:#ff9f43;">${((results.weights_used?.w_lsi??0.15)*100).toFixed(0)}%</strong>
                     </div>
                 </div>
 
                 <div class="card full-width">
-                    <h2>📊 Performance Summary</h2>
+                    <h2>📊 Performance Summary <span style="font-size:0.65em;color:#8b9dc3;font-weight:normal;font-family:var(--mono);">
+                        ${isNSGA ? '— Case A (Max Sustainability): ' : '— Optimised System: '}
+                        ${Array.isArray(bestX)?bestX[0].toFixed(0):0} kWp PV &nbsp;·&nbsp;
+                        ${Array.isArray(bestX)?bestX[1].toFixed(0):0} kW Wind &nbsp;·&nbsp;
+                        ${Array.isArray(bestX)?bestX[2].toFixed(0):0} kWh Bat
+                    </span></h2>
                     <div class="results-grid">
                         <div class="metric-card">
                             <div class="label">MPBSI Score</div>
@@ -2147,12 +2344,12 @@
                         <div class="metric-card">
                             <div class="label">Gross RES Generation</div>
                             <div class="value" style="color:#00BFFF;">${grossRES.toFixed(0)}</div>
-                            <div class="label">MWh/year (before losses)</div>
+                            <div class="label">MWh/year · Optimised system output</div>
                         </div>
                         <div class="metric-card">
                             <div class="label">Net Delivered Energy</div>
                             <div class="value" style="color:#38ef7d;">${netDelivered.toFixed(0)}</div>
-                            <div class="label">MWh/year (after curtailment)</div>
+                            <div class="label">MWh/year · After curtailment losses</div>
                         </div>
                         <div class="metric-card">
                             <div class="label">Annual Demand</div>
@@ -2209,7 +2406,7 @@
                             <div class="value" style="font-size:2em; color:${effBadgeColor}; font-weight:bold;">${effAutoDays.toFixed(1)}</div>
                             <div class="label" style="color:${effBadgeColor};">days (MATLAB theoretical)</div>
                             <div style="margin-top:8px; font-size:0.78em; color:#a0a8d4;">
-                                🔋 Usable batt: ${battEffKWh.toFixed(0)} kWh (0.6×BESS)<br>
+                                🔋 Usable batt: ${battEffKWh.toFixed(0)} kWh (0.75×BESS)<br>
                                 🔵 Usable H₂: ${h2EffKWh.toFixed(0)} kWh (×η_FC ${(eta_FC*100).toFixed(0)}%)<br>
                                 ⚡ Critical load: ${criticalDailyKWh.toFixed(0)} kWh/day
                             </div>
@@ -2231,7 +2428,7 @@
                                 <div style="color:#8b9dc3; font-size:0.85em;">🔋 Battery (Nominal)</div>
                                 <div style="color:#667eea; font-size:1.4em; font-weight:bold;">${battKWh.toFixed(0)} kWh</div>
                                 <div style="color:#38ef7d; font-size:0.9em; font-weight:600;">→ ${battEffKWh.toFixed(0)} kWh usable</div>
-                                <div style="color:#8b9dc3; font-size:0.78em;">0.6×BESS (SOC_max−SOC_min)</div>
+                                <div style="color:#8b9dc3; font-size:0.78em;">0.75×BESS (MATLAB: 0.95−0.20)</div>
                             </div>
                             <div style="text-align:center; padding:12px; background:rgba(56,239,125,0.1); border-radius:10px;">
                                 <div style="color:#8b9dc3; font-size:0.85em;">🔵 H₂ Storage (Nominal)</div>
@@ -2251,7 +2448,7 @@
                             </div>
                         </div>
                         <p style="margin-top:12px; font-size:0.85em; color:#a0a8d4;">
-                            <em>Autonomy (MATLAB) = (0.6×BESS + E_H2×η_FC) ÷ (0.6×Annual_Load/365) &nbsp;|&nbsp; Battery RT η=${((eta_ch*eta_dis)*100).toFixed(1)}% &nbsp;|&nbsp; H₂ RT η=${((eta_EL*eta_FC)*100).toFixed(1)}%</em>
+                            <em>Autonomy (MATLAB) = (0.75×BESS + E_H2×η_FC) ÷ (0.6×Annual_Load/365) &nbsp;|&nbsp; Battery RT η=${((eta_ch*eta_dis)*100).toFixed(1)}% &nbsp;|&nbsp; H₂ RT η=${((eta_EL*eta_FC)*100).toFixed(1)}%</em>
                         </p>
                     </div>
                 </div>
@@ -2268,6 +2465,168 @@
                         ${configHtml}
                     </table>
                 </div>
+
+                ${(opt.pareto_cases || results.optimization?.pareto_cases || []).length >= 3 ? `
+                <div class="card full-width" id="pareto_cases_card">
+                    <h2>📊 NSGA-II Pareto Case Comparison</h2>
+                    <p style="color:#8b9dc3;margin-bottom:20px;">
+                        Three representative solutions from the Pareto front —
+                        <b style="color:#38ef7d">A</b> (Max Sustainability) &nbsp;│&nbsp;
+                        <b style="color:#FFD700">B</b> (Balanced Tradeoff) &nbsp;│&nbsp;
+                        <b style="color:#ff9f43">C</b> (Minimum Cost)
+                    </p>
+
+                    <!-- ── 3-column sizing + pillars ── -->
+                    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-bottom:24px;">
+                    ${(opt.pareto_cases || results.optimization?.pareto_cases || []).map((c,ci) => {
+                        const x = c.x || [];
+                        const p = c.pillars || {};
+                        const colMap = ['#38ef7d','#FFD700','#ff9f43'];
+                        const col    = colMap[ci] || '#667eea';
+                        const label  = c.label || ('Case '+'ABC'[ci]);
+                        const mpbsi  = (c.mpbsi || 0).toFixed(4);
+                        const aut    = (c.autonomy_days || 0).toFixed(2);
+                        const npc_c  = (c.npc_crore || c.npc_scaled || 0);
+                        const npcStr = c.npc_crore ? '₹'+npc_c.toFixed(2)+' Cr' : npc_c.toFixed(4);
+                        const pillarRows = ['ESI','EcSI','TRI','ORI','LSI'].map(k => {
+                            const v  = (p[k]||0);
+                            const vc = v>=0.85?'#38ef7d':v>=0.65?'#FFD700':'#ff6b6b';
+                            return '<tr><td style="color:#a0a8d4;padding:3px 0">'+k+'</td>'
+                                 + '<td style="text-align:right;color:'+vc+';font-weight:700;font-family:var(--mono)">'+v.toFixed(4)+'</td></tr>';
+                        }).join('');
+                        const varLabels = ['PV (kWp)','Wind (kW)','Battery (kWh)',
+                                           'Electrolyzer (kW)','H₂ Storage (kWh)','Fuel Cell (kW)'];
+                        const varRows = varLabels.map((lb,i) =>
+                            '<tr><td style="color:#a0a8d4;padding:3px 0">'+lb+'</td>'
+                          + '<td style="text-align:right;font-weight:700;font-family:var(--mono)">'+(x[i]||0).toFixed(2)+'</td></tr>'
+                        ).join('');
+                        return '<div style="background:rgba(255,255,255,0.04);border:1px solid '+col+'44;'
+                             + 'border-radius:12px;padding:18px;">'
+                             + '<div style="font-size:0.7em;color:'+col+';font-weight:700;'
+                             + 'letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;">'
+                             + label + '</div>'
+                             + '<div style="font-size:2em;font-weight:800;color:'+col+';'
+                             + 'font-family:var(--mono);margin-bottom:2px;">'+mpbsi+'</div>'
+                             + '<div style="font-size:0.75em;color:#8b9dc3;margin-bottom:14px;">'
+                             + 'MPBSI &nbsp;│&nbsp; ⏱ '+aut+'d &nbsp;│&nbsp; 💰 '+npcStr+'</div>'
+                             + '<div style="font-size:0.7em;color:#667eea;font-weight:700;letter-spacing:1px;margin-bottom:6px;">SYSTEM SIZING</div>'
+                             + '<table style="width:100%;border-collapse:collapse;font-size:0.83em;">'+varRows+'</table>'
+                             + '<div style="margin-top:12px;border-top:1px solid rgba(255,255,255,0.08);padding-top:10px;">'
+                             + '<div style="font-size:0.7em;color:#667eea;font-weight:700;letter-spacing:1px;margin-bottom:6px;">PILLAR INDICES</div>'
+                             + '<table style="width:100%;border-collapse:collapse;font-size:0.83em;">'+pillarRows+'</table>'
+                             + '</div></div>';
+                    }).join('')}
+                    </div>
+
+                    <!-- ── Techno-strategic comparison table (matching MATLAB output) ── -->
+                    <div style="overflow-x:auto;">
+                    <table style="width:100%;border-collapse:collapse;font-size:0.88em;">
+                        <thead>
+                            <tr style="background:rgba(102,126,234,0.18);">
+                                <th style="text-align:left;padding:10px 14px;color:#a78bfa;border-bottom:1px solid rgba(102,126,234,0.3);">Impact Category</th>
+                                ${(opt.pareto_cases || results.optimization?.pareto_cases || []).map((c,ci) => {
+                                    const cols = ['#38ef7d','#FFD700','#ff9f43'];
+                                    return '<th style="text-align:right;padding:10px 14px;color:'+cols[ci]+';border-bottom:1px solid rgba(102,126,234,0.3);">'
+                                         + (c.label || ('Case '+'ABC'[ci])) + '</th>';
+                                }).join('')}
+                            </tr>
+                        </thead>
+                        <tbody>
+                        ${(() => {
+                            const cases = opt.pareto_cases || results.optimization?.pareto_cases || [];
+                            const v = (x, d=2) => x !== undefined && x !== null ? parseFloat(x).toFixed(d) : '—';
+                            const pct = x => x !== undefined && x !== null ? (parseFloat(x)*100).toFixed(4)+'%' : '—';
+                            const cr = x => x !== undefined && x !== null ? '₹'+parseFloat(x).toFixed(2)+' Cr' : '—';
+                            const sections = [
+                                { header: '💰 FINANCIAL IMPACT', rows: [
+                                    ['Microgrid NPC (20yr)', c => cr(c.lifecycle?.NPC_microgrid_crore)],
+                                    ['Diesel System NPC', c => cr(c.lifecycle?.NPC_diesel_crore)],
+                                    ['Mission Savings', c => {
+                                        const s = c.lifecycle?.Net_Savings_crore;
+                                        if (s == null) return '—';
+                                        const col = parseFloat(s) >= 0 ? '#38ef7d' : '#ff6b6b';
+                                        return '<span style="color:'+col+';font-weight:700">'+cr(s)+'</span>';
+                                    }],
+                                    ['LCOE (₹/kWh)', c => v(c.lifecycle?.LCOE_Rs_per_kWh, 4)],
+                                ]},
+                                { header: '🚛 LOGISTICS IMPACT', rows: [
+                                    ['Initial H₂ Trips', c => c.lifecycle?.Initial_H2_trips ?? c.h2_logistics?.Initial_trips ?? '—'],
+                                    ['Sustained H₂ Trips/yr', c => c.lifecycle?.Sustained_H2_trips ?? c.h2_logistics?.Trips_per_year ?? '—'],
+                                    ['Diesel Convoys/yr', c => c.lifecycle?.Diesel_convoys ?? '—'],
+                                    ['Convoy Exposure Avoided', c => c.lifecycle?.Convoy_exposure_avoided ?? '—'],
+                                ]},
+                                { header: '👥 MANPOWER IMPACT', rows: [
+                                    ['Diesel Manpower', c => c.lifecycle?.Diesel_personnel ?? '6'],
+                                    ['Microgrid Manpower', c => c.lifecycle?.Microgrid_personnel ?? '2'],
+                                    ['Personnel Saved', c => c.lifecycle?.Personnel_saved ?? '4'],
+                                    ['Man-hours Saved/yr', c => {
+                                        const mh = c.lifecycle?.Manhours_saved;
+                                        return mh != null ? parseFloat(mh).toLocaleString() : '11,680';
+                                    }],
+                                ]},
+                                { header: '⚔️ TACTICAL IMPACT', rows: [
+                                    ['Autonomy (days)', c => v(c.autonomy_days)],
+                                    ['Critical LPSP', c => pct(c.lpsp_critical)],
+                                    ['Renewable Ratio', c => v(c.renewable_ratio, 3)],
+                                ]},
+                                { header: '🌱 ENVIRONMENTAL', rows: [
+                                    ['CO₂ Avoided (t/yr)', c => v(c.lifecycle?.CO2_avoided_ton_yr, 1)],
+                                ]},
+                            ];
+                            let html = '';
+                            let rowIdx = 0;
+                            sections.forEach(sec => {
+                                html += '<tr><td colspan="'+(cases.length+1)+'" style="padding:10px 14px 4px;color:#a78bfa;'
+                                     + 'font-size:0.78em;font-weight:700;letter-spacing:1px;'
+                                     + 'background:rgba(102,126,234,0.06);">'
+                                     + sec.header + '</td></tr>';
+                                sec.rows.forEach(([label, fn]) => {
+                                    const bg = rowIdx%2===0 ? '' : 'background:rgba(255,255,255,0.02);';
+                                    html += '<tr style="'+bg+'">'
+                                          + '<td style="padding:7px 14px;color:#c8d0e8;">'+label+'</td>';
+                                    cases.forEach(c => {
+                                        const val = fn(c);
+                                        html += '<td style="padding:7px 14px;text-align:right;'
+                                              + 'font-family:var(--mono);color:#e0e6ff;">'
+                                              + val + '</td>';
+                                    });
+                                    html += '</tr>';
+                                    rowIdx++;
+                                });
+                            });
+                            return html;
+                        })()}
+                        </tbody>
+                    </table>
+                    </div>
+
+                    <!-- ── Engineering units per case ── -->
+                    <div style="margin-top:20px;border-top:1px solid rgba(102,126,234,0.15);padding-top:16px;">
+                        <div style="font-size:0.72em;color:#a78bfa;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:12px;">⚙️ PHYSICAL DEPLOYMENT UNITS</div>
+                        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;">
+                        ${(opt.pareto_cases || results.optimization?.pareto_cases || []).map((c,ci) => {
+                            const eng = c.engineering_sizing || {};
+                            const h2l = c.h2_logistics || {};
+                            const cols = ['#38ef7d','#FFD700','#ff9f43'];
+                            const col  = cols[ci];
+                            const inf  = v => v == null ? '∞' : v;
+                            return '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(102,126,234,0.15);border-radius:10px;padding:14px;">'
+                                 + '<div style="font-size:0.7em;color:'+col+';font-weight:700;letter-spacing:1px;margin-bottom:10px;">'
+                                 + (c.label||('Case '+'ABC'[ci])) + '</div>'
+                                 + '<table style="width:100%;border-collapse:collapse;font-size:0.82em;">'
+                                 + '<tr><td style="color:#8b9dc3;padding:2px 0">PV Panels (540W)</td><td style="text-align:right;font-family:var(--mono)">'+(eng.PV_panels??'—')+'</td></tr>'
+                                 + '<tr><td style="color:#8b9dc3;padding:2px 0">Wind Turbines (10kW)</td><td style="text-align:right;font-family:var(--mono)">'+(eng.Wind_turbines??'—')+'</td></tr>'
+                                 + '<tr><td style="color:#8b9dc3;padding:2px 0">Electrolysers (5kW)</td><td style="text-align:right;font-family:var(--mono)">'+(eng.Electrolysers??'—')+'</td></tr>'
+                                 + '<tr><td style="color:#8b9dc3;padding:2px 0">Fuel Cells (10kW)</td><td style="text-align:right;font-family:var(--mono)">'+(eng.FuelCells??'—')+'</td></tr>'
+                                 + '<tr><td style="color:#8b9dc3;padding:2px 0">H₂ Storage (kg)</td><td style="text-align:right;font-family:var(--mono)">'+(eng.H2_kg!=null?eng.H2_kg.toFixed(1):'—')+'</td></tr>'
+                                 + '<tr><td style="color:#8b9dc3;padding:2px 0">H₂ Tanks (30kg)</td><td style="text-align:right;font-family:var(--mono)">'+(eng.H2_tanks??'—')+'</td></tr>'
+                                 + '<tr><td style="color:#8b9dc3;padding:2px 0">H₂ Backup Days</td><td style="text-align:right;font-family:var(--mono)">'+(eng.H2_backup_days!=null?eng.H2_backup_days.toFixed(2):'—')+'</td></tr>'
+                                 + '<tr><td style="color:#8b9dc3;padding:2px 0">Initial Tanker Trips</td><td style="text-align:right;font-family:var(--mono)">'+(eng.Tanker_trips??h2l.Initial_trips??'—')+'</td></tr>'
+                                 + '</table></div>';
+                        }).join('')}
+                        </div>
+                    </div>
+                </div>` : ''}
 
                 ${Object.keys(steps).length > 0 ? `
                 <div class="card full-width">
@@ -2320,7 +2679,6 @@
             window._lastResults = results;
 
             // ── Populate 10-step detail tab ──
-            populate10StepTab(steps, s1, s2, s3, s4, step5, step6, step7, step8, step9, step10);
 
             // ── Render CAPEX charts ──
             setTimeout(() => { renderCapexCharts(bestX, rel); setTimeout(() => { if(window.fitIframeHeight) window.fitIframeHeight(); }, 800); }, 80);
@@ -2329,231 +2687,176 @@
             switchTab('results');
 
             // ── Generate graphs in background after results settle ──
-            setTimeout(() => generateGraphs(results), 1800);
+            // Populate H2 logistics immediately
+            populateH2LogisticsTab(results);
+            // Render graphs — first pass (may have 0-width if tab is hidden)
+            setTimeout(() => {
+                generateGraphs(results);
+                // Second pass after tab becomes visible — ensures correct sizing
+                setTimeout(() => {
+                    if (window.__lastResults) {
+                        window.dispatchEvent(new Event('resize'));
+                        ['g_radar','g_bars','g_config','g_conv','g_pareto','g_energy','g_pie'].forEach(id => {
+                            const el = document.getElementById(id);
+                            if (el && typeof Plotly !== 'undefined' && el.data) {
+                                try { Plotly.relayout(id, {autosize:true}); } catch(e) {}
+                            }
+                        });
+                    }
+                }, 1500);
+            }, 400);
         }
 
         // ══════════════════════════════════════════════════════════════════
-        //  10-STEP DETAIL TAB — populate from run_pipeline() results
+        //  H₂ LOGISTICS TAB
         // ══════════════════════════════════════════════════════════════════
-        function populate10StepTab(steps, s1, s2, s3, s4, step5, step6, step7, step8, step9, step10) {
-            const el = document.getElementById('steps_detail_container');
-            if (!el) return;
+        function populateH2LogisticsTab(results) {
+            if (!results) return;
+            window.__lastResults = results;
+            const cont = document.getElementById('h2_logistics_content');
+            if (!cont) return;
+            const opt  = results.optimization || {};
+            const mode = (results.mode || 'resource').toLowerCase();
+            const badge = document.getElementById('h2_mode_badge');
+            if (badge) badge.textContent = mode === 'resource' ? '(Resource Mode)' : '(Mission Mode)';
 
-            const v  = (x, d=2) => (x !== undefined && x !== null) ? parseFloat(x).toFixed(d) : '—';
-            const pct = x => (x !== undefined && x !== null) ? (parseFloat(x)*100).toFixed(4)+'%' : '—';
-            const badge = (val, thresh=1e-4) => parseFloat(val) <= thresh
-                ? `<span style="color:var(--green);font-weight:700">${pct(val)} ✓ FEASIBLE</span>`
-                : `<span style="color:var(--red);font-weight:700">${pct(val)} ✗ INFEASIBLE</span>`;
+            // PSO best case
+            const psoCases = (opt.best_x && results.h2_logistics) ? [{
+                label: 'PSO — Global Best',
+                x:     opt.best_x,
+                h2l:   results.h2_logistics
+            }] : [];
 
-            const kv = (rows) => rows.map(([k,v]) =>
-                `<div class="kv-row"><span class="kv-key">${k}</span><span class="kv-val">${v}</span></div>`
-            ).join('');
+            // NSGA Pareto cases A/B/C
+            const paretoCases = (opt.pareto_cases || []).map(c => ({
+                label: c.label || '—',
+                x:     c.x,
+                h2l:   c.h2_logistics || {}
+            }));
 
-            const stepCard = (num, icon, title, colour, body) => `
-                <div class="card full-width">
-                    <h2>${icon} STEP ${num} — ${title}</h2>
-                    <div style="display:inline-flex;align-items:center;gap:6px;
-                                font-family:var(--mono);font-size:0.68em;font-weight:700;
-                                padding:2px 10px;border-radius:20px;margin-bottom:12px;
-                                background:${colour}18;border:1px solid ${colour}44;color:${colour};">
-                        MATLAB: Step${num}_*.m
+            const allCases = [...psoCases, ...paretoCases];
+            if (!allCases.length) {
+                cont.innerHTML = '<p style="color:#8b9dc3;font-style:italic;">No cases available.</p>';
+                return;
+            }
+
+            const fv = (v, dp=2) => (v==null || isNaN(parseFloat(v))) ? '—' : parseFloat(v).toFixed(dp);
+            const fi = (v) => (v==null || isNaN(parseInt(v))) ? '—' : parseInt(v);
+            const finf = (v) => (parseFloat(v) > 9990) ? '∞' : fv(v, 1);
+
+            const lbColors = {'PSO':'#a78bfa','A':'#38ef7d','B':'#FFD700','C':'#ff9f43'};
+            const lbColor  = (label) => {
+                for (const [k,c] of Object.entries(lbColors))
+                    if (label.includes(k)) return c;
+                return '#8b9dc3';
+            };
+
+            function caseCard(cas) {
+                const h   = cas.h2l || {};
+                const col = lbColor(cas.label);
+                const ni  = parseFloat(h.Net_import_kg || 0);
+                const npc = parseFloat(h.NPC_resource_crore || 0);
+
+                let refillStr;
+                if (ni < 1e-3)                        refillStr = '<span style="color:#38ef7d;">NEGLIGIBLE (self-sustaining)</span>';
+                else if (parseFloat(h.Refill_years||0) > 9990) refillStr = 'NOT REQUIRED';
+                else                                  refillStr = fv(h.Refill_years, 2) + ' years';
+
+                const xArr = cas.x || [];
+                const sizingLine = xArr.length >= 6
+                    ? `PV ${parseFloat(xArr[0]).toFixed(1)} kWp &nbsp;·&nbsp; Wind ${parseFloat(xArr[1]).toFixed(1)} kW &nbsp;·&nbsp;
+                       Bat ${parseFloat(xArr[2]).toFixed(0)} kWh &nbsp;·&nbsp; H₂ ${parseFloat(xArr[4]).toFixed(0)} kWh &nbsp;·&nbsp;
+                       FC ${parseFloat(xArr[5]).toFixed(1)} kW`
+                    : '';
+
+                return `<div style="background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.09);
+                                    border-radius:14px;padding:22px;flex:1;min-width:260px;max-width:340px;">
+
+                    <div style="font-size:0.78em;font-weight:800;letter-spacing:2px;text-transform:uppercase;
+                                color:${col};margin-bottom:6px;">⛽ ${cas.label}</div>
+                    <div style="font-size:0.7em;color:#8b9dc3;font-family:var(--mono);margin-bottom:14px;line-height:1.6;">
+                        ${sizingLine}
                     </div>
-                    ${body}
+
+                    <div style="font-size:0.78em;color:#c8d0e8;font-weight:700;margin-bottom:6px;
+                                border-bottom:1px solid rgba(255,255,255,0.07);padding-bottom:4px;">
+                        🫙 Tank &amp; Initial State
+                    </div>
+                    <table style="width:100%;border-collapse:collapse;font-size:0.82em;margin-bottom:12px;">
+                        <tr><td style="padding:3px 0;color:#8b9dc3;">Tank size</td>
+                            <td style="text-align:right;font-family:var(--mono);color:#e8eaf0;">${fv(h.H2_storage_kg,1)} kg</td></tr>
+                        <tr><td style="padding:3px 0;color:#8b9dc3;">Initial H₂ in tank</td>
+                            <td style="text-align:right;font-family:var(--mono);color:#e8eaf0;">${fv(h.Initial_H2_kg,1)} kg</td></tr>
+                        <tr><td style="padding:3px 0;color:#8b9dc3;">Initial tanker trips</td>
+                            <td style="text-align:right;font-family:var(--mono);color:#e8eaf0;">${fi(h.Initial_trips)}</td></tr>
+                    </table>
+
+                    <div style="font-size:0.78em;color:#c8d0e8;font-weight:700;margin-bottom:6px;
+                                border-bottom:1px solid rgba(255,255,255,0.07);padding-bottom:4px;">
+                        🛡️ Autonomy
+                    </div>
+                    <table style="width:100%;border-collapse:collapse;font-size:0.82em;margin-bottom:12px;">
+                        <tr><td style="padding:3px 0;color:#8b9dc3;">Initial autonomy</td>
+                            <td style="text-align:right;font-family:var(--mono);color:#FFD700;">${fv(h.Initial_autonomy_days,2)} days</td></tr>
+                        <tr><td style="padding:3px 0;color:#8b9dc3;">Final autonomy</td>
+                            <td style="text-align:right;font-family:var(--mono);color:#38ef7d;">${fv(h.Final_autonomy_days,2)} days</td></tr>
+                        <tr><td style="padding:3px 0;color:#8b9dc3;">Time to full autonomy</td>
+                            <td style="text-align:right;font-family:var(--mono);color:#a78bfa;">${finf(h.Days_to_full_autonomy)} days</td></tr>
+                    </table>
+
+                    <div style="font-size:0.78em;color:#c8d0e8;font-weight:700;margin-bottom:6px;
+                                border-bottom:1px solid rgba(255,255,255,0.07);padding-bottom:4px;">
+                        💧 Hydrogen Flow
+                    </div>
+                    <table style="width:100%;border-collapse:collapse;font-size:0.82em;margin-bottom:14px;">
+                        <tr><td style="padding:3px 0;color:#8b9dc3;">H₂ used / year</td>
+                            <td style="text-align:right;font-family:var(--mono);color:#e8eaf0;">${fv(h.H2_used_kg,1)} kg</td></tr>
+                        <tr><td style="padding:3px 0;color:#8b9dc3;">H₂ produced / year</td>
+                            <td style="text-align:right;font-family:var(--mono);color:#e8eaf0;">${fv(h.H2_prod_kg,1)} kg</td></tr>
+                        <tr><td style="padding:3px 0;color:#8b9dc3;">Net import / year</td>
+                            <td style="text-align:right;font-family:var(--mono);
+                                       color:${ni<1?'#38ef7d':'#ff9f43'};">${fv(h.Net_import_kg,1)} kg</td></tr>
+                        <tr><td style="padding:3px 0;color:#8b9dc3;">Refill requirement</td>
+                            <td style="text-align:right;font-size:0.9em;">${refillStr}</td></tr>
+                        <tr><td style="padding:3px 0;color:#8b9dc3;">Hydrogen trips / year</td>
+                            <td style="text-align:right;font-family:var(--mono);color:#e8eaf0;">${fi(h.Trips_per_year)}</td></tr>
+                        <tr><td style="padding:3px 0;color:#8b9dc3;">Recovery after deficit</td>
+                            <td style="text-align:right;font-family:var(--mono);color:#e8eaf0;">${finf(h.Recovery_days)} days</td></tr>
+                    </table>
+
+                    <div style="background:rgba(56,239,125,0.08);border:1px solid rgba(56,239,125,0.25);
+                                border-radius:10px;padding:12px;text-align:center;">
+                        <div style="font-size:0.72em;color:#8b9dc3;margin-bottom:3px;">Resource NPC</div>
+                        <div style="font-size:1.5em;font-weight:800;color:#38ef7d;font-family:var(--mono);">
+                            ₹ ${npc.toFixed(2)} Cr
+                        </div>
+                        <div style="font-size:0.68em;color:#8b9dc3;margin-top:2px;">CAPEX + OM + H₂ cost NPV</div>
+                    </div>
                 </div>`;
+            }
 
-            el.innerHTML = `
-                <h2>🔬 10-Step Pipeline Analysis</h2>
-                <p style="font-family:var(--mono);font-size:0.78em;color:var(--text2);margin-bottom:20px;">
-                    All steps run in order. Each matches the corresponding MATLAB file exactly.
-                </p>` +
-
-            stepCard(1,'📂','Load Data','#00b4d8', `
-                <div class="results-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">
-                    ${[['Hours',v(s1.N||s1.n,0)],['Avg Load',v(s1.avg_load_kW||s1.avg_load)+ ' kW'],
-                       ['Peak Load',v(s1.peak_load_kW||s1.peak_load)+' kW'],['Avg GHI',v(s1.avg_ghi||s1.avg_ghi_wh_m2)+' Wh/m²']]
-                      .map(([l,vl])=>`<div class="metric-card"><div class="label">${l}</div><div class="value" style="font-size:1.5em">${vl}</div></div>`).join('')}
-                </div>`) +
-
-            stepCard(2,'☀️','Solar PV Model (Temperature-Derated)','#f4a300', `
-                <div class="results-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">
-                    ${[['Installed kWp',v(s2.pv_capacity_kWp||s2.PV_capacity_kWp||s2.pv_capacity_kwp)],
-                       ['Modules',v(s2.N_modules||s2.NSolarPV||s2.n_modules,0)],
-                       ['Annual PV',v(s2.annual_solar_MWh||s2.Annual_Energy_MWh||s2.annual_energy_mwh)+' MWh'],
-                       ['Capacity Factor',v(s2.capacity_factor||s2.Capacity_Factor,3)]]
-                      .map(([l,vl])=>`<div class="metric-card"><div class="label">${l}</div><div class="value" style="font-size:1.5em">${vl}</div></div>`).join('')}
-                </div>
-                <div style="margin-top:14px">${kv([
-                    ['Module rated power','PSolarPV_ref = 550 W'],
-                    ['Reference irradiance','G_ref = 1000 W/m²'],
-                    ['Temp coefficient','K_T = −0.004 /°C'],
-                    ['Cell temp equation','Tcell = Tamb + 0.0256 × GHI'],
-                    ['System efficiency','η_SolarPV = 0.95']
-                ])}</div>`) +
-
-            stepCard(3,'💨','Wind Power Model (Piecewise Cubic)','#00b4d8', `
-                <div class="results-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">
-                    ${[['Wind Capacity',v(s3.wind_capacity_kW||s3.Wind_capacity_kW||s3.wind_capacity_kw)+' kW'],
-                       ['Annual Wind',v(s3.annual_wind_MWh||s3.Annual_Wind_MWh||s3.annual_wind_mwh)+' MWh'],
-                       ['Capacity Factor',v(s3.capacity_factor||s3.Capacity_Factor,3)]]
-                      .map(([l,vl])=>`<div class="metric-card"><div class="label">${l}</div><div class="value" style="font-size:1.5em">${vl}</div></div>`).join('')}
-                </div>
-                <div style="margin-top:14px">${kv([
-                    ['Cut-in speed V_ci','3 m/s'],['Rated speed V_r','12 m/s'],['Cut-out speed V_co','25 m/s'],
-                    ['Power curve','Cubic polynomial between V_ci and V_r'],
-                    ['Wind data height','10 m anemometer (no hub-height correction in Step 3)']
-                ])}</div>`) +
-
-            stepCard(4,'⚡','Hybrid Generation (PV + Wind)','#00e676', `
-                <div class="results-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">
-                    ${[['Annual Load',v(s4.annual_load_MWh||s4.Annual_Load_MWh||s4.annual_load_mwh)+' MWh'],
-                       ['Annual Solar',v(s4.annual_hybrid_MWh||s4.Annual_Solar_MWh||s4.annual_solar_mwh)+' MWh'],
-                       ['Annual Wind',v(s4.annual_wind_MWh||s4.Annual_Wind_MWh||s4.annual_wind_mwh)+' MWh'],
-                       ['Adequacy Ratio',v(s4.renewable_adequacy||s4.Renewable_Adequacy,4)]]
-                      .map(([l,vl])=>`<div class="metric-card"><div class="label">${l}</div><div class="value" style="font-size:1.5em">${vl}</div></div>`).join('')}
-                </div>
-                ${parseFloat(s4.renewable_adequacy||s4.Renewable_Adequacy||0) >= 1
-                    ? `<div class="info-box" style="margin-top:12px;border-left-color:var(--green);color:var(--green)">✅ RES generation exceeds annual demand — surplus available for storage charging.</div>`
-                    : `<div class="info-box" style="margin-top:12px;border-left-color:var(--gold);color:var(--gold)">⚠️ RES generation below annual demand — storage essential to meet critical load.</div>`}`) +
-
-            stepCard(5,'🔋','Priority Battery Dispatch','#667eea', `
-                <div style="margin-bottom:14px">
-                    ${badge(step5.LPSP_critical||step5.lpsp_critical||1)}
-                    <span style="font-family:var(--mono);font-size:0.75em;color:var(--text2);margin-left:10px;">LPSP Critical Load</span>
-                </div>
-                <div class="results-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
-                    ${[['Battery Capacity',v(step5.Battery_cap_kWh||step5.battery_cap_kwh)+' kWh'],
-                       ['Curtailed Semi',v(step5.curtailed_semi_MWh||step5.curtailed_semi_mwh)+' MWh'],
-                       ['Curtailed Non',v(step5.curtailed_non_MWh||step5.curtailed_non_mwh)+' MWh']]
-                      .map(([l,vl])=>`<div class="metric-card"><div class="label">${l}</div><div class="value" style="font-size:1.3em">${vl}</div></div>`).join('')}
-                </div>
-                <div style="margin-top:14px">${kv([
-                    ['Priority fractions','Critical 60% → Semi 25% → Non 15%'],
-                    ['Charge efficiency η_ch','0.95'],['Discharge efficiency η_dis','0.95'],
-                    ['Initial SOC','0.8 × Battery_cap'],['Minimum SOC','0.2 × Battery_cap'],
-                    ['Charge logic','charge = min(gen × η_ch, Battery_cap − SOC)'],
-                    ['SOC update (charge)','SOC += charge; gen -= charge / η_ch'],
-                    ['SOC update (discharge)','SOC -= discharge / η_dis']
-                ])}</div>`) +
-
-            stepCard(6,'📦','Seasonal Storage Analysis','#f4a300', `
-                <div class="results-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">
-                    ${[['Required (Total Load)',v(step6.req_storage_total_MWh||step6.Required_Storage_Total_MWh||0)+' MWh'],
-                       ['Required (Critical Load)',v(step6.req_storage_critical_MWh||step6.Required_Storage_Critical_MWh||0)+' MWh']]
-                      .map(([l,vl])=>`<div class="metric-card"><div class="label">${l}</div><div class="value" style="font-size:1.3em">${vl}</div></div>`).join('')}
-                </div>
-                <div style="margin-top:14px">${kv([
-                    ['Method','Cumulative net-energy (seasonal deficit method)'],
-                    ['Formula','max(cumsum(P_gen − Load) − min(cumsum(P_gen − Load)))'],
-                    ['Case 1 (total)','P_gen − Load_total'],
-                    ['Case 2 (critical)','P_gen − Load_critical  (60% of Load)']
-                ])}</div>`) +
-
-            stepCard(7,'⚗️','Battery + H₂ Priority Dispatch (Full Efficiency)','#a78bfa', `
-                <div style="margin-bottom:14px">
-                    ${badge(step7.LPSP_critical??step7.lpsp_critical??1)}
-                    <span style="font-family:var(--mono);font-size:0.75em;color:var(--text2);margin-left:10px;">LPSP Critical Load</span>
-                </div>
-                <div class="results-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
-                    ${[['Battery Capacity',v(step7.Battery_cap_kWh||step7.battery_cap_kwh)+' kWh'],
-                       ['H₂ Capacity',v(step7.H2_cap_kWh||step7.h2_cap_kwh)+' kWh'],
-                       ['Curtailed Semi',v(step7.curtailed_semi_MWh||step7.curtailed_semi_mwh)+' MWh'],
-                       ['Curtailed Non',v(step7.curtailed_non_MWh||step7.curtailed_non_mwh)+' MWh']]
-                      .map(([l,vl])=>`<div class="metric-card"><div class="label">${l}</div><div class="value" style="font-size:1.3em">${vl}</div></div>`).join('')}
-                </div>
-                <div style="margin-top:14px">${kv([
-                    ['H₂ initial SOC','0.5 × H2_cap'],
-                    ['Electrolyser efficiency η_EL','0.70'],
-                    ['Fuel cell efficiency η_FC','0.55'],
-                    ['Discharge order','Battery first → then Fuel Cell (H₂)'],
-                    ['Battery discharge','max_bat_out = (SOC − SOC_min) × η_bat_dis; SOC -= discharge / η_dis'],
-                    ['H₂ discharge','max_fc_out = H₂ × η_FC; H₂ -= discharge / η_FC'],
-                    ['Battery charge','charge = min(gen × η_ch, cap − SOC); gen -= charge / η_ch'],
-                    ['H₂ electrolysis','H₂ += generation × η_EL  (after battery is full)']
-                ])}</div>
-                <div style="margin-top:10px;padding:10px 14px;background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.2);border-radius:4px;font-family:var(--mono);font-size:0.78em;color:#a78bfa;">
-                    ⚠ KEY DIFFERENCE vs Step 5: Battery discharge uses η_dis; H₂ uses η_FC on both charge and discharge. Step 10 uses simplified model with NO efficiency factors.
-                </div>`) +
-
-            stepCard(8,'📉','Deficit Window Analysis','#ff3d57', `
-                <div class="results-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
-                    ${[['Max Consecutive Hours',v(step8.max_consecutive_hours||step8.max_hours||0,0)+' h'],
-                       ['Max Deficit Duration',v(step8.max_consecutive_days||step8.max_days||0)+' days'],
-                       ['Worst Window Energy',v(step8.max_consecutive_energy_MWh||step8.max_energy_mwh||0)+' MWh']]
-                      .map(([l,vl])=>`<div class="metric-card"><div class="label">${l}</div><div class="value" style="font-size:1.3em">${vl}</div></div>`).join('')}
-                </div>
-                <div style="margin-top:14px">${kv([
-                    ['Basis','P_gen − Load_critical (net critical load power)'],
-                    ['Scan method','Longest window of consecutive net < 0 hours'],
-                    ['Selection rule','Window with maximum cumulative energy deficit chosen'],
-                    ['Year-end check','If year ends in deficit, that is also captured']
-                ])}</div>`) +
-
-            stepCard(9,'🛡️','Survivability H₂ Sizing','#00b4d8', `
-                <div class="results-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px">
-                    ${[['Critical Daily Energy',v(step9.critical_daily_energy_kWh||step9.Critical_daily_energy_kWh||0)+' kWh/day'],
-                       ['H₂ Baseline ('+v(step9.baseline_days||2,0)+'d)',v((step9.H2_baseline_chemical_kWh||step9.h2_baseline_chemical_kWh||0)/1000,3)+' MWh'],
-                       ['H₂ Stress Case ('+v(step9.stress_days||4,0)+'d)',v((step9.H2_stress_chemical_kWh||step9.h2_stress_chemical_kWh||0)/1000,3)+' MWh']]
-                      .map(([l,vl])=>`<div class="metric-card"><div class="label">${l}</div><div class="value" style="font-size:1.3em">${vl}</div></div>`).join('')}
-                </div>
-                <div style="margin-top:14px">${kv([
-                    ['Formula','H₂_chemical = (days × critical_daily) / η_FC'],
-                    ['Fuel cell efficiency η_FC','0.55'],
-                    ['Critical daily','Σ(0.60 × Load_hourly) / 365'],
-                    ['Baseline case','2 days (MATLAB default)'],
-                    ['Stress case','4 days (MATLAB default)']
-                ])}</div>`) +
-
-            stepCard(10,'🏕️','Survivability Dispatch (Simplified Model)','#00e676', `
-                <div style="margin-bottom:14px">
-                    ${badge(step10.LPSP_critical||step10.lpsp_critical||1)}
-                    <span style="font-family:var(--mono);font-size:0.75em;color:var(--text2);margin-left:10px;">LPSP Critical Load</span>
-                </div>
-                <div class="results-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
-                    ${[['Battery Capacity',v(step10.Battery_cap_kWh||step10.battery_cap_kwh||0)+' kWh'],
-                       ['H₂ Capacity',v(step10.H2_cap_kWh||step10.h2_cap_kwh||0)+' kWh'],
-                       ['Curtailed Semi',v(step10.curtailed_semi_MWh||step10.curtailed_semi_mwh||0)+' MWh'],
-                       ['Curtailed Non',v(step10.curtailed_non_MWh||step10.curtailed_non_mwh||0)+' MWh']]
-                      .map(([l,vl])=>`<div class="metric-card"><div class="label">${l}</div><div class="value" style="font-size:1.3em">${vl}</div></div>`).join('')}
-                </div>
-                <div style="margin-top:14px">${kv([
-                    ['H₂ initial condition','H₂ = H2_cap (starts FULL — unlike Step 7 which is 0.5×cap)'],
-                    ['Battery discharge (SIMPLIFIED)','SOC -= discharge_bat  ← NO η_dis factor'],
-                    ['H₂ discharge (SIMPLIFIED)','H₂ -= discharge_H₂  ← raw kWh, NO η_FC'],
-                    ['Surplus battery charge','charge = min(generation, Battery_cap − SOC)  ← NO η'],
-                    ['Surplus H₂','H₂ = min(H₂ + generation, H2_cap)  ← raw kWh, NO η_EL']
-                ])}</div>
-                <div style="margin-top:12px;padding:10px 14px;background:rgba(0,230,118,0.06);border:1px solid rgba(0,230,118,0.2);border-radius:4px;font-family:var(--mono);font-size:0.78em;color:var(--green);">
-                    ✅ STEP 10 = SIMPLIFIED survivability model.  Step 7 = REALISTIC efficiency model. Both match their MATLAB counterparts exactly.
-                </div>`) +
-
-            `<div class="card full-width">
-                <h2>⚖️ Step 5 / Step 7 / Step 10 — Efficiency Model Comparison</h2>
-                <table>
-                    <tr><th>Parameter</th><th>Step 5 (Battery Only)</th><th>Step 7 (Bat + H₂)</th><th>Step 10 (Survivability)</th></tr>
-                    <tr><td>Battery discharge</td><td>SOC -= dis / η_dis</td><td>SOC -= dis / η_dis</td><td>SOC -= dis  <strong>(no η)</strong></td></tr>
-                    <tr><td>H₂ discharge</td><td>—</td><td>H₂ -= dis / η_FC</td><td>H₂ -= dis  <strong>(no η)</strong></td></tr>
-                    <tr><td>Battery charge</td><td>min(gen × η_ch, cap − SOC)</td><td>min(gen × η_ch, cap − SOC)</td><td>min(gen, cap − SOC)  <strong>(no η)</strong></td></tr>
-                    <tr><td>H₂ storage</td><td>—</td><td>H₂ += gen × η_EL</td><td>H₂ += gen  <strong>(no η_EL)</strong></td></tr>
-                    <tr><td>H₂ initial</td><td>—</td><td>0.5 × H2_cap</td><td>H2_cap (full)</td></tr>
-                    <tr><td>η_EL</td><td>—</td><td>0.70</td><td>ignored</td></tr>
-                    <tr><td>η_FC</td><td>—</td><td>0.55</td><td>ignored</td></tr>
-                    <tr><td>η_ch / η_dis</td><td>0.95 / 0.95</td><td>0.95 / 0.95</td><td>ignored</td></tr>
-                </table>
+            cont.innerHTML = `
+            <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start;margin-bottom:18px;">
+                ${allCases.map(caseCard).join('')}
+            </div>
+            <div style="font-size:0.74em;color:#8b9dc3;font-family:var(--mono);
+                        background:rgba(102,126,234,0.07);border-radius:8px;padding:10px 14px;
+                        border:1px solid rgba(102,126,234,0.18);">
+                ⚙️ Parameters: LHV_H₂ = 33.3 kWh/kg &nbsp;·&nbsp; Tanker capacity = 900 kg
+                &nbsp;·&nbsp; H₂ cost = ₹350/kg &nbsp;·&nbsp; Initial fill = 50% (resource) / 60% (mission)
+                &nbsp;·&nbsp; η_FC = 0.55 &nbsp;·&nbsp; η_EL = 0.70 &nbsp;·&nbsp; r = 8% &nbsp;·&nbsp; n = 20 yr
             </div>`;
         }
 
-                function getWeight(pillar) {
-            const map = { TRI:'w_tri', ORI:'w_ori', LSI:'w_lsi', ESI:'w_esi', EcSI:'w_ecsi' };
-            const id = map[pillar];
-            const val = parseFloat(document.getElementById(id)?.value) || 0;
-            return (val * 100).toFixed(0);
-        }
 
-        // ══════════════════════════════════════════════════════════════════
-        //  GRAPHS — Generated from backend results data
-        // ══════════════════════════════════════════════════════════════════
         function generateGraphs(results) {
             if (!results) return;
+            if (typeof Plotly === 'undefined') {
+                // Plotly not loaded yet — retry in 500ms
+                setTimeout(() => generateGraphs(results), 500);
+                return;
+            }
+            window.__lastResults = results;
             const opt     = results.optimization || results;
             const pillars = opt.best_pillars || opt.pillars || {};
             const bestX   = opt.best_x || [];
@@ -2566,16 +2869,23 @@
             // Save scroll position — Plotly renders cause layout shifts that jump page up
             const savedScroll = window.scrollY;
 
+            const isNSGA   = (opt.algorithm||'').toUpperCase().includes('NSGA');
+            const parCases = opt.pareto_cases || [];
             document.getElementById('graphs_container').innerHTML = `
                 <div class="card full-width">
-                    <h2>📊 Complete Visualization Dashboard</h2>
+                    <h2>📊 Complete Visualization Dashboard
+                        <span style="font-size:0.65em;color:#8b9dc3;font-weight:normal;margin-left:8px;">
+                            ${opt.algorithm||''} · ${(results.mode||'').toUpperCase()} Mode
+                        </span>
+                    </h2>
                 </div>
                 <div class="card"><h2>1. MPBSI Pillars Radar</h2><div id="g_radar" class="chart-container"></div></div>
                 <div class="card"><h2>2. Pillar Bar Chart</h2><div id="g_bars" class="chart-container"></div></div>
                 <div class="card"><h2>3. Optimal System Sizing</h2><div id="g_config" class="chart-container"></div></div>
                 ${conv.length > 0 ? '<div class="card"><h2>4. Convergence Curve</h2><div id="g_conv" class="chart-container"></div></div>' : ''}
-                <div class="card"><h2>5. Energy Balance Overview</h2><div id="g_energy" class="chart-container"></div></div>
-                <div class="card"><h2>6. Pillar Contribution to MPBSI</h2><div id="g_pie" class="chart-container"></div></div>`;
+                ${isNSGA && parCases.length > 0 ? '<div class="card full-width"><h2>5. Pareto Front — MPBSI vs NPC</h2><div id="g_pareto" class="chart-container"></div></div>' : ''}
+                <div class="card"><h2>${isNSGA && parCases.length>0 ? '6' : '5'}. Energy Balance Overview</h2><div id="g_energy" class="chart-container"></div></div>
+                <div class="card"><h2>${isNSGA && parCases.length>0 ? '7' : '6'}. Pillar Contribution to MPBSI</h2><div id="g_pie" class="chart-container"></div></div>`;
 
             const dark = { paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)', font:{color:'#fff'} };
             const axis = { color:'#fff', gridcolor:'rgba(255,255,255,0.1)' };
@@ -2605,13 +2915,22 @@
                 {responsive:true,displayModeBar:false});
             }
 
-            // 4. Convergence
+            // 4. Convergence — matches MATLAB BestCost plot (Iteration 1..MaxIt)
             if (conv.length > 0 && document.getElementById('g_conv')) {
+                const convMin = Math.max(0, Math.min(...conv.filter(v=>v>-1e5)) - 0.05);
+                const convMax = Math.min(1, Math.max(...conv) + 0.02);
                 Plotly.newPlot('g_conv', [{
-                    x: Array.from({length:conv.length},(_,i)=>i), y: conv,
-                    type:'scatter', mode:'lines', line:{color:'#38ef7d',width:3}, name:'Best MPBSI'
-                }], { ...dark, xaxis:{...axis,title:'Iteration'}, yaxis:{...axis,title:'MPBSI',range:[0,1]} },
-                {responsive:true,displayModeBar:false});
+                    x: Array.from({length:conv.length},(_,i)=>i+1),
+                    y: conv.map(v => v > -1e5 ? v : null),
+                    type:'scatter', mode:'lines',
+                    line:{color:'#38ef7d',width:2.5},
+                    fill:'tozeroy', fillcolor:'rgba(56,239,125,0.07)',
+                    name:'Best MPBSI', connectgaps: true
+                }], {
+                    ...dark,
+                    xaxis:{...axis, title:'Iteration', dtick: Math.ceil(conv.length/8)},
+                    yaxis:{...axis, title:'Best MPBSI Score', range:[convMin, convMax]}
+                }, {responsive:true, displayModeBar:false});
             }
 
             // 5. Energy balance bar
@@ -2628,11 +2947,11 @@
 
             // 6. Pillar contribution pie — use backend weights_used (actual weights PSO ran with)
             const wUsed = results.weights_used || {};
-            const w = { TRI:  wUsed.w_tri  ?? parseFloat(document.getElementById('w_tri')?.value)  ?? 0.30,
+            const w = { TRI:  wUsed.w_tri  ?? parseFloat(document.getElementById('w_tri')?.value)  ?? 0.25,
                         EcSI: wUsed.w_ecsi ?? parseFloat(document.getElementById('w_ecsi')?.value) ?? 0.25,
                         ORI:  wUsed.w_ori  ?? parseFloat(document.getElementById('w_ori')?.value)  ?? 0.15,
                         LSI:  wUsed.w_lsi  ?? parseFloat(document.getElementById('w_lsi')?.value)  ?? 0.15,
-                        ESI:  wUsed.w_esi  ?? parseFloat(document.getElementById('w_esi')?.value)  ?? 0.15 };
+                        ESI:  wUsed.w_esi  ?? parseFloat(document.getElementById('w_esi')?.value)  ?? 0.10 };
             Plotly.newPlot('g_pie', [{
                 labels: pKeys,
                 values: pKeys.map(k => ((pillars[k]||0) * (w[k]||0.1) * 100)),
@@ -2643,9 +2962,45 @@
             }], { ...dark, title:{text:'Weighted Pillar Contribution',font:{color:'#fff'}} },
             {responsive:true,displayModeBar:false});
 
+            // 7. Pareto front (NSGA-II only)
+            if (isNSGA && parCases.length > 0 && document.getElementById('g_pareto')) {
+                const pX = parCases.map(c => c.npc_scaled || 0);
+                const pY = parCases.map(c => c.mpbsi || 0);
+                const pL = parCases.map(c => (c.label||'').replace(' – ','<br>'));
+                const pC = ['#38ef7d','#FFD700','#ff9f43'];
+                Plotly.newPlot('g_pareto', [{
+                    x: pX, y: pY, mode: 'markers+text',
+                    text: ['A','B','C'], textposition: 'top center',
+                    marker: { color: pC, size: 18, symbol: 'star',
+                               line: { color: '#fff', width: 2 } },
+                    type: 'scatter', name: 'Pareto Cases',
+                    hovertemplate: '<b>%{text}</b><br>MPBSI: %{y:.4f}<br>NPC: ₹%{x:.2f} Cr<extra></extra>'
+                }], {
+                    ...dark,
+                    xaxis: { ...axis, title: 'NPC (₹ Cr) — Minimize →' },
+                    yaxis: { ...axis, title: '← Maximize — MPBSI Score' },
+                    annotations: parCases.map((c,i) => ({
+                        x: pX[i], y: pY[i],
+                        text: (c.label||'').split(' – ')[0],
+                        showarrow: false, yshift: 20,
+                        font: { color: pC[i], size: 11 }
+                    }))
+                }, { responsive: true, displayModeBar: false });
+            }
+
             // Restore scroll position — Plotly layout shifts cause the page to jump up
             requestAnimationFrame(() => { window.scrollTo(0, savedScroll); });
-            setTimeout(() => { window.scrollTo(0, savedScroll); }, 200);
+            setTimeout(() => {
+                window.scrollTo(0, savedScroll);
+                // Force Plotly to recalculate dimensions — critical when tab was hidden during render
+                window.dispatchEvent(new Event('resize'));
+                ['g_radar','g_bars','g_config','g_conv','g_pareto','g_energy','g_pie'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el && typeof Plotly !== 'undefined') {
+                        try { Plotly.relayout(id, {}); } catch(e) {}
+                    }
+                });
+            }, 400);
         }
 
         function displayGenerationMetrics(solarData, windData, loadData) {
@@ -3153,22 +3508,24 @@
         window.receiveBackendResults = function(jsonResults) {
             try {
                 const results = typeof jsonResults === 'string' ? JSON.parse(jsonResults) : jsonResults;
-                // If running tab wasn't already active (e.g., direct Streamlit injection),
-                // briefly show it completing before switching to results
-                const wasRunning = document.getElementById('running')?.classList.contains('active');
-                if (!wasRunning) {
-                    const algo = (results.optimization || results).algorithm || 'PSO';
-                    startRunningTab(algo);
+                if (!results || !results.optimization) {
+                    console.warn('receiveBackendResults: invalid payload', results);
+                    return;
                 }
-                setTimeout(() => {
+                const wasRunning = document.getElementById('running')?.classList.contains('active');
+                if (wasRunning) {
+                    // Already showing running tab — finish animation then show results
                     finishRunningTab();
-                    setTimeout(() => {
-                        displayResults(results);
-                        console.log('✅ Backend results received and displayed.');
-                    }, 1400);
-                }, wasRunning ? 0 : 600);
+                    setTimeout(() => displayResults(results), 2500);
+                } else {
+                    // Direct injection from session state — show results immediately
+                    displayResults(results);
+                    console.log('✅ Results injected directly, MPBSI=',
+                        results.optimization.best_mpbsi);
+                }
             } catch(e) {
-                showError('Failed to parse backend results: ' + e.message);
+                console.error('receiveBackendResults error:', e);
+                showError('Failed to display results: ' + e.message);
             }
         };
 
@@ -3526,7 +3883,7 @@
                         .replace(/…/g,'...')
                         .replace(/Δ/g,'D')
                         .replace(/[☀-➿︀-️⬀-⯿]/g,'')
-                        .replace(/[^ -~ -ÿ]/g,'');
+                        .replace(/[^ -~ -ÿ]/g,'');
                 }
                 const safe = (v, d=2, fallback='--') => {
                     const n = parseFloat(v);
@@ -3731,9 +4088,9 @@
 
                 const _wu = (optimizationResults && optimizationResults.weights_used) || {};
                 const weights = {
-                    ESI:  _wu.w_esi  ?? 0.15,
+                    ESI:  _wu.w_esi  ?? 0.10,
                     EcSI: _wu.w_ecsi ?? 0.25,
-                    TRI:  _wu.w_tri  ?? 0.30,
+                    TRI:  _wu.w_tri  ?? 0.25,
                     ORI:  _wu.w_ori  ?? 0.15,
                     LSI:  _wu.w_lsi  ?? 0.15
                 };
@@ -3797,7 +4154,7 @@
                 const varUnits  = ['kWp','kW','kWh','kW','kWh','kW'];
                 const varNotes  = [
                     'Rated at STC (temp-derated in dispatch)',
-                    'Hub-height corrected (40m, alpha=0.14)',
+                    mode==='resource' ? 'Hub-height 40m | V_ci=2.5 V_r=10 V_co=20 | exp=2.2 x1.05 | eta=0.80' : 'Hub-height corrected (40m, alpha=0.14)',
                     'Usable SoC: 20-100% of E_BESS',
                     'Max electrolyzer rated power',
                     'Chemical energy storage capacity',
@@ -3825,10 +4182,10 @@
                 kv('Runtime',          safe(opt.runtime_seconds, 1) + ' s');
                 gap(6);
 
-                subBar('System Efficiency Constants  (MATLAB microgrid_dispatch_mission.m)');
+                subBar(`System Efficiency Constants  (MATLAB ${mode==='resource'?'microgrid_dispatch_resource.m':'microgrid_dispatch_mission.m'})`);
                 [
                     ['PV Temperature Coeff.', 'KT = -0.004 / degC  |  eta_PV = 0.95  |  Tcell = Tamb + 0.0256xGHI'],
-                    ['Wind Hub-Height',        'Hhub = 40 m  |  alpha = 0.14  |  eta_wind = 0.90'],
+                    ['Wind Hub-Height',        mode==='resource' ? 'Hhub=40m | alpha=0.14 | eta_wind=0.80 | V_ci=2.5 V_r=10 V_co=20 | exponent=2.2 x1.05' : 'Hhub=40m | alpha=0.14 | eta_wind=0.80 | V_ci=2.5 V_r=10 V_co=20 | exponent=2.2 x1.05'],
                     ['Battery Efficiency',     'eta_ch = eta_dis = 0.95  ->  RT = 90.25%'],
                     ['Electrolyzer Eff.',      'eta_EL = 0.70'],
                     ['Fuel Cell Eff.',         'eta_FC = 0.55'],
@@ -3870,7 +4227,8 @@
                     const NPC4=CAP4+Bat_r4+FC_r4+EL_r4+OM4;
                     const annKwh4=(rel.annual_load_MWh||0)*1000;
                     const LCOE4=annKwh4>0?NPC4/(annKwh4*n4):0;
-                    kv('Total CAPEX',       'Rs.' + (CAP4/1e7).toFixed(3) + ' Cr');
+                    kv('Total CAPEX',   
+    'Rs.' + (CAP4/1e7).toFixed(3) + ' Cr');
                     kv('Net Present Cost',  'Rs.' + (NPC4/1e7).toFixed(3) + ' Cr  (' + n4 + ' yr)');
                     kv('LCOE',              'Rs.' + LCOE4.toFixed(2) + ' /kWh  (discounted)');
                     kv('Annual O&M',        'Rs.' + ((fp4.om_rate/100)*CAP4/1e7).toFixed(3) + ' Cr/yr');
@@ -3979,11 +4337,55 @@
                 //  PAGE 5 — 20-YEAR LIFECYCLE & TACTICAL
                 // ═══════════════════════════════════════════════════════════
                 newPage();
-                sectionBar('5.  20-Year Mission Lifecycle & Tactical Analysis', 120, 40, 160);
+                sectionBar('5.  20-Year ' + (mode==='resource'?'Resource Strategic':'Mission') + ' Lifecycle & Tactical Analysis', 120, 40, 160);
 
-                const hasLc = lcData && lcData.NPC_microgrid_crore !== undefined;
+                // Resource mode uses resource_lifecycle; mission mode uses lifecycle
+                const rlcData = results.resource_lifecycle || {};
+                const hasRlc  = mode === 'resource' && rlcData && rlcData.NPC_microgrid_crore !== undefined;
+                const hasLc   = !hasRlc && lcData && lcData.NPC_microgrid_crore !== undefined;
 
-                if (hasLc) {
+                if (hasRlc) {
+                    subBar('Resource Strategic Financial Comparison  (Rs. Crore, 20-yr NPV)');
+                    tableRow(['Metric','Value'], [110,CW-110], true);
+                    [
+                        ['Microgrid CAPEX',               crFmt((rlcData.CAPEX_crore||0)*1e7)],
+                        ['Microgrid NPC (20 yr)',          crFmt((rlcData.NPC_microgrid_crore||0)*1e7)],
+                        ['  -> includes H2 logistics NPV', '(tanker cap=900kg, Rs.350/kg)'],
+                        ['  -> includes manpower NPV (2)',  '(2 personnel x Rs.12L/yr)'],
+                        ['Diesel System NPC (total)',      crFmt((rlcData.NPC_diesel_crore||0)*1e7)],
+                        ['  -> incl. manpower (6 staff)',   '(6 personnel x Rs.12L/yr)'],
+                        ['  -> incl. convoy costs',         '(Rs.1.5L/convoy x n_convoys)'],
+                        ['  -> incl. risk premium',         '(5% x Rs.15 Cr)'],
+                        ['LCOE (Resource Mode)',           'Rs. ' + safe(rlcData.LCOE_Rs_per_kWh, 2) + ' /kWh'],
+                        ['Net Mission-Adjusted Savings',  crFmt((rlcData.Net_Savings_crore||0)*1e7)],
+                    ].forEach(([l,v]) => {
+                        const isTotal = l.includes('Net ');
+                        tableRow([l,v],[110,CW-110],false,isTotal);
+                    });
+                    gap(6);
+
+                    subBar('Logistics Impact  (Resource Mode)');
+                    tableRow(['Metric','Value'], [110,CW-110], true);
+                    [
+                        ['Initial H2 Tanker Trips',       safeInt(rlcData.Initial_H2_trips)         + ' trips (50% fill)'],
+                        ['Sustained H2 Trips / yr',       safeInt(rlcData.Sustained_H2_trips)       + ' trips/yr'],
+                        ['Diesel Convoys / yr',           safeInt(rlcData.Diesel_convoys)           + ' convoys/yr'],
+                        ['Convoy Exposure Avoided',       safeInt(rlcData.Convoy_exposure_avoided)  + ' events'],
+                    ].forEach(([l,v]) => tableRow([l,v],[110,CW-110]));
+                    gap(6);
+
+                    subBar('Manpower & Environmental Impact');
+                    tableRow(['Metric','Value'], [110,CW-110], true);
+                    [
+                        ['Diesel Personnel Required',     safeInt(rlcData.Diesel_personnel)         + ' personnel'],
+                        ['Microgrid Personnel Needed',    safeInt(rlcData.Microgrid_personnel)       + ' personnel'],
+                        ['Personnel Saved',               safeInt(rlcData.Personnel_saved)           + ' personnel'],
+                        ['Man-hours Saved / yr',          safe(rlcData.Manhours_saved, 0)            + ' hrs/yr'],
+                        ['CO2 Avoided / yr',              safe(rlcData.CO2_avoided_ton_yr, 1)        + ' t CO2/yr'],
+                        ['Autonomy',                      safe(rlcData.Autonomy_days, 2)             + ' days'],
+                    ].forEach(([l,v]) => tableRow([l,v],[110,CW-110]));
+
+                } else if (hasLc) {
                     subBar('Financial Comparison  (Rs. Crore, 20-yr horizon)');
                     tableRow(['Metric','Value'], [110,CW-110], true);
                     [
@@ -4028,14 +4430,19 @@
                 } else {
                     gap(4);
                     doc.setFontSize(9); doc.setFont('helvetica','italic'); doc.setTextColor(150,140,200);
-                    doc.text('20-yr lifecycle data is populated automatically after a successful optimization run.', M+4, y); y+=8;
-                    doc.text('Financial parameters from Mission_Lifecycle_NSCA_CaseB_20yr.m:', M+4, y); y+=7;
+                    doc.text('Lifecycle data is populated automatically after a successful optimization run.', M+4, y); y+=8;
+                    doc.text('Financial parameters (' + (mode==='resource'?'Resource':'Mission') + ' mode):', M+4, y); y+=7;
                     [
                         ['Discount rate','8%'],['Project lifetime','20 years'],
                         ['O&M escalation','4%/yr (escalated NPV loop)'],
                         ['Fuel escalation','5%/yr'],['Diesel price','Rs.95/L'],
                         ['Diesel efficiency','0.27 L/kWh'],['DG CAPEX','Rs.25,000/kW'],
-                        ['Staff salary','Rs.12L/person/yr'],['Convoy cost','Rs.1.5L/convoy'],
+                        ...(mode==='resource'?[
+                            ['Microgrid personnel','2'],['Diesel personnel','6'],
+                            ['H2 price','Rs.350/kg'],['Tanker capacity','900 kg'],
+                        ]:[
+                            ['Staff salary','Rs.12L/person/yr'],['Convoy cost','Rs.1.5L/convoy'],
+                        ]),
                         ['Risk premium','Rs.7.5 Cr  (5% x Rs.15 Cr incident)'],
                         ['CO2 factor','2.68 kg/L diesel'],
                     ].forEach(([l,v]) => kv(l,v));
@@ -4139,7 +4546,7 @@
 
                 gap(6);
                 subBar('MATLAB Source Files');
-                [
+                const matlabRefs = [
                     'Step1_Load_Akhnoor.m  ->  BaseData struct (GHI, Wind, Temp, Load)',
                     'Step2_Solar_Model.m   ->  P_pv = PSolarPV_refx(GHI/Gref)x(1+KTxDeltaT)xeta/1000',
                     'Step3_Wind_Model.m    ->  piecewise cubic curve, raw 10m wind speed',
@@ -4150,12 +4557,23 @@
                     'Step8_Deficit.m       ->  Longest consecutive critical deficit',
                     'Step9_Sizing.m        ->  H2 = (daysxdaily) / eta_FC  (2d & 4d)',
                     'Step10_Surviv.m       ->  H2 full, no eta -- islanding model',
-                    'microgrid_dispatch_mission.m  ->  8760h, hub-height wind, eta_wind=0.90',
-                    'MPBSI_Evaluator_Mission_Land.m  ->  5-pillar, land<=50000 m^2',
-                    'PSO_MPBSI.m           ->  nPop=30, MaxIt=80, w=0.8, wdamp=0.98',
-                    'NSGA_MASTER_MISSION.m ->  PopSize=80, MaxGen=60, 3 Pareto cases',
-                    'Mission_Lifecycle_NSCA_CaseB_20yr.m  ->  escalated OM, mission diesel NPC',
-                ].forEach(ref => {
+                    ...(mode === 'resource' ? [
+                        'microgrid_dispatch_resource.m  ->  V_ci=2.5 V_r=10 V_co=20 | exp=2.2 x1.05 | eta_wind=0.80',
+                        'MPBSI_Evaluator_Resource_Land.m  ->  ESI=0.05 EcSI=0.20 TRI=0.30 ORI=0.25 LSI=0.20',
+                        'PSO_MPBSI_Resource_landConstraint.m  ->  nPop=30, MaxIt=80, EL always ON',
+                        'NSGA_MASTER_RESOURCE.m  ->  PopSize=80, MaxGen=60, 3 Pareto cases',
+                        'Hydrogen_Logistics_resource.m  ->  Initial fill 50%, net import, recovery days',
+                        'microgrid_full_deployment_analysis.m  ->  Panel/turbine/tank counts',
+                        'Master_techo_strategic_resource.m  ->  Resource mission savings vs diesel',
+                    ] : [
+                        'microgrid_dispatch_mission.m  ->  8760h, hub-height wind (40m, alpha=0.14), eta_wind=0.80',
+                        'MPBSI_Evaluator_Mission_Land.m  ->  ESI=0.10 EcSI=0.20 TRI=0.25 ORI=0.25 LSI=0.20',
+                        'PSO_MPBSI.m           ->  nPop=30, MaxIt=80, w=0.8, wdamp=0.98',
+                        'NSGA_MASTER_MISSION.m ->  PopSize=80, MaxGen=60, 3 Pareto cases',
+                        'Mission_Lifecycle_NSCA_CaseB_20yr.m  ->  escalated OM, mission diesel NPC',
+                    ]),
+                ];
+                matlabRefs.forEach(ref => {
                     checkY(6);
                     doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(180,190,230);
                     doc.text(sanitize('> ' + (ref || '')), M+4, y); y += 5.5;
@@ -4163,12 +4581,17 @@
 
                 gap(6);
                 subBar('Mission Feasibility Criteria');
-                [
+                (mode === 'resource' ? [
+                    ['LPSP_critical',   '<= 1x10^-4  (zero-tolerance for critical load failure)'],
+                    ['Renewable_ratio', '>= 0.99  (Renewable_ratio >= 0.99 — resource mode)'],
+                    ['Autonomy',        'No hard gate — smooth reward T2 = 1-exp(-auto/1.5)'],
+                    ['Land',            'Area_PV(10xkWp) + Area_WT(15xkW) <= Land_Available'],
+                ] : [
                     ['LPSP_critical',   '<= 1x10-^4  (zero-tolerance for critical load failure)'],
                     ['Renewable_ratio', '>= 0.999  (99.9% from renewables)'],
                     ['Autonomy',        '>= 7 days  (NSGA doctrine  |  PSO default >= 7d)'],
                     ['Land',            'Area_PV(10xkWp) + Area_WT(15xkW) <= Land_Available'],
-                ].forEach(([l,v]) => kv(l,v));
+                ]).forEach(([l,v]) => kv(l,v));
 
                 // ── Apply footers ──────────────────────────────────────────
                 drawFooter(pageNum);
@@ -4389,21 +4812,153 @@
                             </div>`).join('')}
                     </div>
                     <p style="font-size:.74em;color:#505070;margin-top:8px;">
-                        Source: MPBSI_Evaluator_Mission_Land.m — Cost_PV=55000, Cost_WT=120000,
-                        Cost_Bat=15000, Cost_EL=70000, Cost_H2=15000, Cost_FC=110000
+                        Source: MPBSI_Evaluator_Mission_Land.m — Cost_PV=55000, Cost_WT=120000, Cost_Bat=15000, Cost_EL=70000, Cost_H2=15000, Cost_FC=110000
+                        C1=1/(1+LCOE/₹26/kWh diesel ref) · EL_factor target=0.20 (surplus CF)
                     </p>
                 </details>
             `;
 
             // ── Lifecycle panel ──────────────────────────────────────────
             if (lcPanel) {
-                const hasLc = lc && lc.NPC_microgrid_crore !== undefined;
-                if (!hasLc) {
+                const mode = results.mode || 'mission';
+                const rlc  = results.resource_lifecycle || {};
+                const mlc  = results.mission_lifecycle  || {};
+                const hasRlc = mode === 'resource' && rlc.NPC_microgrid_crore !== undefined;
+                const hasMlc = mode === 'mission'  && mlc.NPC_microgrid_crore !== undefined;
+                const hasLc  = !hasRlc && !hasMlc && lc && lc.NPC_microgrid_crore !== undefined;
+
+                if (!hasRlc && !hasMlc && !hasLc) {
                     lcPanel.style.display = 'none';
                     return;
                 }
                 lcPanel.style.display = 'block';
 
+                if (hasMlc) {
+                    // ── MISSION MODE ──
+                    const savM    = mlc.Net_Savings_crore || 0;
+                    const savColM = savM >= 0 ? '#38ef7d' : '#ff6b6b';
+                    lcPanel.innerHTML = `
+                        <h2>⚔️ 20-Year Mission Strategic Lifecycle Analysis</h2>
+                        <p style="color:#8b9dc3;font-size:.84em;margin:-6px 0 18px;">
+                            Source: Master_techno_economic_mission.m — H₂ logistics (60% fill) + manpower + convoy + risk vs diesel
+                        </p>
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px;margin-bottom:22px;">
+                            ${kpi('Microgrid NPC', '₹'+(mlc.NPC_microgrid_crore||0).toFixed(2)+' Cr', '#667eea', 'incl. H₂+manpower')}
+                            ${kpi('Diesel NPC', '₹'+(mlc.NPC_diesel_crore||0).toFixed(2)+' Cr', '#ff6b6b', '+manpower+convoys+risk')}
+                            ${kpi(savM>=0?'🟢 Net Saving':'🔴 Net Cost', (savM>=0?'+':'')+'₹'+Math.abs(savM).toFixed(2)+' Cr', savColM, 'mission-adjusted')}
+                            ${kpi('LCOE', '₹'+(mlc.LCOE_Rs_per_kWh||0).toFixed(2)+'/kWh', '#38ef7d', 'mission mode')}
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;">
+                            <div>
+                                <h3 style="color:#667eea;font-size:.88em;letter-spacing:1px;margin-bottom:10px;">🔋 MICROGRID NPC (MISSION)</h3>
+                                <table class="lc-table"><thead><tr><th>Item</th><th style="text-align:right;">Value</th></tr></thead><tbody>
+                                    <tr><td>CAPEX</td><td style="text-align:right;" class="lc-neutral">₹${(mlc.CAPEX_crore||0).toFixed(3)} Cr</td></tr>
+                                    <tr class="sub-row"><td>O&M NPV (4% escalation)</td><td style="text-align:right;" class="lc-neutral">included</td></tr>
+                                    <tr class="sub-row"><td>H₂ Logistics NPV</td><td style="text-align:right;" class="lc-neutral">(60% fill · ₹350/kg)</td></tr>
+                                    <tr class="sub-row"><td>Personnel NPV (2 staff)</td><td style="text-align:right;" class="lc-neutral">₹12L/person/yr</td></tr>
+                                    <tr class="total-row"><td>Total NPC</td><td style="text-align:right;">₹${(mlc.NPC_microgrid_crore||0).toFixed(3)} Cr</td></tr>
+                                    <tr><td>LCOE</td><td style="text-align:right;" class="lc-highlight">₹${(mlc.LCOE_Rs_per_kWh||0).toFixed(2)}/kWh</td></tr>
+                                </tbody></table>
+                            </div>
+                            <div>
+                                <h3 style="color:#ff6b6b;font-size:.88em;letter-spacing:1px;margin-bottom:10px;">⛽ DIESEL MISSION NPC</h3>
+                                <table class="lc-table"><thead><tr><th>Item</th><th style="text-align:right;">Value</th></tr></thead><tbody>
+                                    <tr><td>DG CAPEX + Fuel + OM</td><td style="text-align:right;" class="lc-warn">included</td></tr>
+                                    <tr class="sub-row"><td>Personnel NPV (6 staff)</td><td style="text-align:right;" class="lc-neutral">₹12L/person/yr</td></tr>
+                                    <tr class="sub-row"><td>Convoy Cost NPV</td><td style="text-align:right;" class="lc-neutral">₹1.5L/convoy</td></tr>
+                                    <tr class="sub-row"><td>Risk Premium</td><td style="text-align:right;" class="lc-neutral">5% × ₹15 Cr</td></tr>
+                                    <tr class="total-row"><td>Total NPC</td><td style="text-align:right;">₹${(mlc.NPC_diesel_crore||0).toFixed(3)} Cr</td></tr>
+                                </tbody></table>
+                            </div>
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+                            <div>
+                                <h3 style="color:#a78bfa;font-size:.88em;letter-spacing:1px;margin-bottom:10px;">🎯 LOGISTICS & MANPOWER</h3>
+                                <table class="lc-table"><thead><tr><th>Metric</th><th style="text-align:right;">Value</th></tr></thead><tbody>
+                                    <tr><td>Initial H₂ Trips (60% fill)</td><td style="text-align:right;" class="lc-neutral">${mlc.Initial_H2_trips??'—'}</td></tr>
+                                    <tr><td>Sustained H₂ Trips/yr</td><td style="text-align:right;" class="lc-highlight">${mlc.Sustained_H2_trips??'—'}</td></tr>
+                                    <tr><td>Diesel Convoys/yr</td><td style="text-align:right;" class="lc-warn">${mlc.Diesel_convoys??'—'}</td></tr>
+                                    <tr><td>Convoy Exposure Avoided</td><td style="text-align:right;" class="lc-highlight">${mlc.Convoy_exposure_avoided??'—'}</td></tr>
+                                    <tr><td>Personnel Saved</td><td style="text-align:right;" class="lc-highlight">${mlc.Personnel_saved??'—'}</td></tr>
+                                    <tr><td>Man-hours Saved/yr</td><td style="text-align:right;" class="lc-highlight">${(mlc.Manhours_saved||0).toLocaleString()}</td></tr>
+                                </tbody></table>
+                            </div>
+                            <div>
+                                <h3 style="color:#38ef7d;font-size:.88em;letter-spacing:1px;margin-bottom:10px;">🌱 ENVIRONMENTAL & TACTICAL</h3>
+                                <table class="lc-table"><thead><tr><th>Metric</th><th style="text-align:right;">Value</th></tr></thead><tbody>
+                                    <tr><td>CO₂ Avoided/yr</td><td style="text-align:right;" class="lc-highlight">${(mlc.CO2_avoided_ton_yr||0).toFixed(1)} t/yr</td></tr>
+                                    <tr><td>Autonomy Days</td><td style="text-align:right;" class="lc-highlight">${(mlc.Autonomy_days||0).toFixed(2)} days</td></tr>
+                                    <tr><td>Critical LPSP</td><td style="text-align:right;" class="lc-highlight">${(mlc.LPSP_critical||0).toFixed(6)}</td></tr>
+                                    <tr><td>Renewable Ratio</td><td style="text-align:right;" class="lc-highlight">${(mlc.Renewable_ratio||0).toFixed(4)}</td></tr>
+                                    <tr><td>REN Threshold</td><td style="text-align:right;" class="lc-neutral">≥ 1.10 (mission surplus)</td></tr>
+                                </tbody></table>
+                            </div>
+                        </div>
+                    `;
+                } else if (hasRlc) {
+                    // ── RESOURCE MODE ──
+                    const savR    = rlc.Net_Savings_crore || 0;
+                    const savColR = savR >= 0 ? '#38ef7d' : '#ff6b6b';
+                    lcPanel.innerHTML = `
+                        <h2>⚔️ 20-Year Resource Strategic Lifecycle Analysis</h2>
+                        <p style="color:#8b9dc3;font-size:.84em;margin:-6px 0 18px;">
+                            Source: Master_techo_strategic_resource.m — H₂ logistics + manpower + convoy + risk vs diesel
+                        </p>
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px;margin-bottom:22px;">
+                            ${kpi('Microgrid NPC', '₹'+(rlc.NPC_microgrid_crore||0).toFixed(2)+' Cr', '#667eea', 'incl. H₂ logistics')}
+                            ${kpi('Diesel NPC', '₹'+(rlc.NPC_diesel_crore||0).toFixed(2)+' Cr', '#ff6b6b', '+manpower+convoys+risk')}
+                            ${kpi(savR>=0?'🟢 Net Saving':'🔴 Net Cost', (savR>=0?'+':'')+'₹'+Math.abs(savR).toFixed(2)+' Cr', savColR, 'mission-adjusted')}
+                            ${kpi('LCOE', '₹'+(rlc.LCOE_Rs_per_kWh||0).toFixed(2)+'/kWh', '#38ef7d', 'resource mode')}
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;">
+                            <div>
+                                <h3 style="color:#667eea;font-size:.88em;letter-spacing:1px;margin-bottom:10px;">🔋 MICROGRID NPC (RESOURCE)</h3>
+                                <table class="lc-table"><thead><tr><th>Item</th><th style="text-align:right;">Value</th></tr></thead><tbody>
+                                    <tr><td>CAPEX</td><td style="text-align:right;"  class="lc-neutral">₹${(rlc.CAPEX_crore||0).toFixed(3)} Cr</td></tr>
+                                    <tr class="sub-row"><td>O&M NPV (4% escalation)</td><td style="text-align:right;" class="lc-neutral">included</td></tr>
+                                    <tr class="sub-row"><td>Replacement NPV (yr10/15)</td><td style="text-align:right;" class="lc-neutral">included</td></tr>
+                                    <tr class="sub-row"><td>H₂ Logistics NPV</td><td style="text-align:right;" class="lc-neutral">(tanker 900kg · ₹350/kg)</td></tr>
+                                    <tr class="sub-row"><td>Personnel NPV (2 staff)</td><td style="text-align:right;" class="lc-neutral">₹12L/person/yr</td></tr>
+                                    <tr class="total-row"><td>Total NPC</td><td style="text-align:right;">₹${(rlc.NPC_microgrid_crore||0).toFixed(3)} Cr</td></tr>
+                                    <tr><td>LCOE</td><td style="text-align:right;" class="lc-highlight">₹${(rlc.LCOE_Rs_per_kWh||0).toFixed(2)}/kWh</td></tr>
+                                </tbody></table>
+                            </div>
+                            <div>
+                                <h3 style="color:#ff6b6b;font-size:.88em;letter-spacing:1px;margin-bottom:10px;">⛽ DIESEL MISSION NPC</h3>
+                                <table class="lc-table"><thead><tr><th>Item</th><th style="text-align:right;">Value</th></tr></thead><tbody>
+                                    <tr><td>DG CAPEX + Fuel + OM</td><td style="text-align:right;" class="lc-warn">included</td></tr>
+                                    <tr class="sub-row"><td>Personnel NPV (6 staff)</td><td style="text-align:right;" class="lc-neutral">₹12L/person/yr</td></tr>
+                                    <tr class="sub-row"><td>Convoy Cost NPV</td><td style="text-align:right;" class="lc-neutral">₹1.5L/convoy</td></tr>
+                                    <tr class="sub-row"><td>Risk Premium</td><td style="text-align:right;" class="lc-neutral">5% × ₹15 Cr</td></tr>
+                                    <tr class="total-row"><td>Total NPC</td><td style="text-align:right;">₹${(rlc.NPC_diesel_crore||0).toFixed(3)} Cr</td></tr>
+                                </tbody></table>
+                            </div>
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+                            <div>
+                                <h3 style="color:#a78bfa;font-size:.88em;letter-spacing:1px;margin-bottom:10px;">🎯 LOGISTICS & MANPOWER</h3>
+                                <table class="lc-table"><thead><tr><th>Metric</th><th style="text-align:right;">Value</th></tr></thead><tbody>
+                                    <tr><td>Initial H₂ Trips</td><td style="text-align:right;" class="lc-neutral">${rlc.Initial_H2_trips??'—'}</td></tr>
+                                    <tr><td>Sustained H₂ Trips/yr</td><td style="text-align:right;" class="lc-highlight">${rlc.Sustained_H2_trips??'—'}</td></tr>
+                                    <tr><td>Diesel Convoys/yr</td><td style="text-align:right;" class="lc-warn">${rlc.Diesel_convoys??'—'}</td></tr>
+                                    <tr><td>Convoy Exposure Avoided</td><td style="text-align:right;" class="lc-highlight">${rlc.Convoy_exposure_avoided??'—'}</td></tr>
+                                    <tr><td>Personnel Saved</td><td style="text-align:right;" class="lc-highlight">${rlc.Personnel_saved??'—'}</td></tr>
+                                    <tr><td>Man-hours Saved/yr</td><td style="text-align:right;" class="lc-highlight">${(rlc.Manhours_saved||0).toLocaleString()}</td></tr>
+                                </tbody></table>
+                            </div>
+                            <div>
+                                <h3 style="color:#38ef7d;font-size:.88em;letter-spacing:1px;margin-bottom:10px;">🌱 ENVIRONMENTAL & TACTICAL</h3>
+                                <table class="lc-table"><thead><tr><th>Metric</th><th style="text-align:right;">Value</th></tr></thead><tbody>
+                                    <tr><td>CO₂ Avoided/yr</td><td style="text-align:right;" class="lc-highlight">${(rlc.CO2_avoided_ton_yr||0).toFixed(1)} t/yr</td></tr>
+                                    <tr><td>Autonomy Days</td><td style="text-align:right;" class="lc-highlight">${(rlc.Autonomy_days||0).toFixed(2)} days</td></tr>
+                                    <tr><td>Critical LPSP</td><td style="text-align:right;" class="lc-highlight">${(rlc.LPSP_critical||0).toFixed(6)}</td></tr>
+                                    <tr><td>Renewable Ratio</td><td style="text-align:right;" class="lc-highlight">${(rlc.Renewable_ratio||0).toFixed(4)}</td></tr>
+                                </tbody></table>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                // ── MISSION MODE (original) ──
                 const lc_micro   = lc.NPC_microgrid_crore;
                 const lc_dfin    = lc.NPC_diesel_financial_crore;
                 const lc_dmis    = lc.NPC_diesel_mission_crore;
@@ -4518,6 +5073,7 @@
                         </div>
                     </div>
                 `;
+                } // end mission mode
             }
 
             // ── Refresh CAPEX charts in the Results tab too ──────────────
