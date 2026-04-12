@@ -485,17 +485,7 @@ with st.sidebar:
     # ── Header (native) ──
     st.markdown("## ⚡ MPBSI Framework")
     st.caption("Mission-Priority Based Sustainability Index")
-    st.markdown(
-        '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 12px;">'
-        '<span style="background:rgba(102,126,234,0.18);border:1px solid rgba(102,126,234,0.4);'
-        'border-radius:20px;padding:3px 10px;font-size:0.72em;font-weight:600;color:#a78bfa;">PSO · NSGA-II</span>'
-        '<span style="background:rgba(102,126,234,0.18);border:1px solid rgba(102,126,234,0.4);'
-        'border-radius:20px;padding:3px 10px;font-size:0.72em;font-weight:600;color:#a78bfa;">130+ Locations</span>'
-        '<span style="background:rgba(102,126,234,0.18);border:1px solid rgba(102,126,234,0.4);'
-        'border-radius:20px;padding:3px 10px;font-size:0.72em;font-weight:600;color:#a78bfa;">v6.0</span>'
-        '</div>',
-        unsafe_allow_html=True,
-    )
+    
     st.divider()
 
     # ── Dataset ──

@@ -408,7 +408,16 @@
         tr:hover td { background: rgba(0,180,216,0.04); }
 
         /* ── CHART CONTAINERS ── */
-        .chart-container { min-height: 340px; }
+        .chart-container {
+            min-height: 340px;
+            border-radius: 6px;
+            overflow: hidden;
+            position: relative;
+        }
+        .chart-container::after {
+            content: '';
+            display: none;
+        }
 
         /* ── STEP CARDS (pipeline progress) ── */
         .step-box {
@@ -473,8 +482,66 @@
             .tabs { gap: 0; }
             .tab { padding: 9px 12px; font-size: 0.8em; }
         }
+
+        /* ── Graphs dashboard section label ── */
+        .gd-section-label {
+            font-family: var(--mono);
+            font-size: .67em;
+            color: var(--text3);
+            letter-spacing: .14em;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+            border-left: 3px solid rgba(0,180,216,0.35);
+            padding-left: 10px;
+            line-height: 1.8;
+        }
+
+        /* ── Responsive chart grids ── */
+        @media (max-width: 680px) {
+            .res-panel [style*="grid-template-columns:1fr 1fr"],
+            .res-panel [style*="grid-template-columns: 1fr 1fr"] {
+                grid-template-columns: 1fr !important;
+            }
+            [id^="g_config"], [id^="g_bars"],
+            [id^="g_radar"], [id^="g_capex_pie"], [id^="g_conv"],
+            [id^="g_co2bar"], [id^="g_pie"], [id^="g_energy"] {
+                height: 260px !important;
+                min-height: 220px !important;
+            }
+        }
         
         .pillar-weight { color: var(--green); font-weight: 700; }
+
+        /* ── Chart card flash animation on render ── */
+        @keyframes chartReveal {
+            from { opacity: 0.3; transform: translateY(6px); }
+            to   { opacity: 1;   transform: translateY(0); }
+        }
+        .chart-fresh {
+            animation: chartReveal 0.45s cubic-bezier(0.22,1,0.36,1) both;
+        }
+
+        /* ── Plotly chart improvements ── */
+        .js-plotly-plot .plotly .modebar {
+            background: rgba(4,7,15,0.85) !important;
+            border: 1px solid rgba(0,180,216,0.15) !important;
+            border-radius: 8px !important;
+            padding: 2px 4px !important;
+        }
+        .js-plotly-plot .plotly .modebar-btn path {
+            fill: rgba(139,157,195,0.7) !important;
+        }
+        .js-plotly-plot .plotly .modebar-btn:hover path {
+            fill: #00b4d8 !important;
+        }
+        .js-plotly-plot .plotly .modebar-btn.active path {
+            fill: #00b4d8 !important;
+        }
+        /* Smooth chart container */
+        [id^="g_"] {
+            border-radius: 6px;
+            overflow: hidden;
+        }
     </style>
 </head>
 <body>
@@ -566,7 +633,7 @@
             <button class="tab active" onclick="switchTab('initial_sizing')">📋 Renewable & Load Analysis</button>
             <button class="tab" id="tab_btn_running" onclick="switchTab('running')" style="display:none;">⚡ Running...</button>
             <button class="tab" onclick="switchTab('results')">📈 Optimization Results</button>
-            <button class="tab" onclick="switchTab('graphs')">📉 Graphs</button>
+
             <button class="tab" id="tab_btn_report" onclick="switchTab('pdf_report')">📄 Download Report</button>
         </div>
 
@@ -909,19 +976,6 @@
             
         </div>
 
-        <!-- COSTS & REPORT TAB -->
-        <!-- GRAPHS TAB -->
-        <div id="graphs" class="tab-content">
-            <div id="graphs_container">
-                <div class="card full-width">
-                    <h2>📈 Visualization Dashboard</h2>
-                    <div class="info-box">
-                        <p>Comprehensive visualization of optimization results and meteorological data</p>
-                        <p style="color: #38ef7d; margin-top: 10px;">💡 <strong>Note:</strong> Solar & Wind profile viewers are available in the Results tab after running optimization</p>
-                    </div>
-                </div>
-            </div>
-        </div>
 
         <!-- PDF REPORT TAB -->
         <div id="pdf_report" class="tab-content">
@@ -1255,17 +1309,7 @@
 
             // ── Re-render Plotly charts when graphs tab becomes visible ──────────
             // Plotly cannot measure element size when tab is display:none — re-render fixes it
-            if (tabName === 'graphs' && window.__lastResults) {
-                setTimeout(() => {
-                    generateGraphs(window.__lastResults);
-                    // Also resize any existing Plotly plots
-                    if (typeof Plotly !== 'undefined') {
-                        document.querySelectorAll('#graphs .chart-container').forEach(el => {
-                            if (el.id) try { Plotly.relayout(el.id, {}); } catch(e) {}
-                        });
-                    }
-                }, 50);
-            }
+
 
             // ── Populate H2 logistics tab on first visit ─────────────────────────
             if (tabName === 'h2_logistics' && window.__lastResults) {
@@ -1287,17 +1331,7 @@
                 // Re-run generateGraphs so Plotly gets correct dimensions
                 generateGraphs(window.__lastResults);
             }
-            // Watch for the graphs div getting the 'active' class
-            const graphsDiv = document.getElementById('graphs');
-            if (graphsDiv && window.MutationObserver) {
-                new MutationObserver((muts) => {
-                    muts.forEach(m => {
-                        if (m.attributeName === 'class' && graphsDiv.classList.contains('active')) {
-                            setTimeout(onGraphsVisible, 30);
-                        }
-                    });
-                }).observe(graphsDiv, { attributes: true, attributeFilter: ['class'] });
-            }
+
             // Same for H2 logistics tab
             const h2Div = document.getElementById('h2_logistics');
             if (h2Div && window.MutationObserver) {
@@ -1790,24 +1824,42 @@
                         offset += mHours[m];
                     }
                     if(typeof Plotly !== 'undefined'){
-                        const dark = { paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(10,12,35,0.6)',
-                                       font:{color:'#c8d0e8',family:'Space Grotesk'},
-                                       xaxis:{color:'#8b9dc3',gridcolor:'rgba(102,126,234,0.1)'},
-                                       yaxis:{color:'#8b9dc3',gridcolor:'rgba(102,126,234,0.12)',title:'kW or kW/m²'},
-                                       yaxis2:{overlaying:'y',side:'right',color:'#8b9dc3',
-                                               gridcolor:'rgba(0,0,0,0)',title:'m/s'},
-                                       legend:{bgcolor:'rgba(10,12,35,0.7)',bordercolor:'rgba(102,126,234,0.3)',borderwidth:1},
-                                       margin:{l:50,r:60,t:20,b:40}, barmode:'group' };
+                        const dark = {
+                            paper_bgcolor:'rgba(0,0,0,0)',
+                            plot_bgcolor:'rgba(8,12,30,0.55)',
+                            font:{color:'#c8d8f0',family:"'IBM Plex Sans',sans-serif",size:12},
+                            xaxis:{color:'#8b9dc3',gridcolor:'rgba(0,180,216,0.09)',
+                                   tickfont:{color:'#8b9dc3',size:12,family:"'IBM Plex Mono',monospace"},
+                                   linecolor:'rgba(0,180,216,0.15)',showline:true},
+                            yaxis:{color:'#8b9dc3',gridcolor:'rgba(0,180,216,0.09)',
+                                   title:{text:'kW / kW/m²',font:{color:'#8b9dc3',size:11}},
+                                   tickfont:{color:'#8b9dc3',size:11},linecolor:'rgba(0,180,216,0.15)',showline:true},
+                            yaxis2:{overlaying:'y',side:'right',color:'#8b9dc3',
+                                    gridcolor:'rgba(0,0,0,0)',
+                                    title:{text:'m/s',font:{color:'#00BFFF',size:11}},
+                                    tickfont:{color:'#8b9dc3',size:11}},
+                            legend:{bgcolor:'rgba(6,10,28,0.85)',bordercolor:'rgba(0,180,216,0.18)',
+                                    borderwidth:1,font:{color:'#c8d8f0',size:11}},
+                            hoverlabel:{bgcolor:'rgba(6,10,28,0.96)',bordercolor:'rgba(0,180,216,0.35)',
+                                        font:{color:'#e8f4ff',size:12}},
+                            margin:{l:58,r:68,t:20,b:50},
+                            barmode:'group',
+                        };
                         Plotly.newPlot('summary_monthly_chart',[
                             {name:'☀️ Avg Solar (kW/m²)', x:months, y:mSolar.map(v=>+v.toFixed(4)),
-                             type:'bar', marker:{color:'rgba(255,215,0,0.75)'}},
+                             type:'bar', marker:{color:'rgba(255,215,0,0.85)',line:{color:'rgba(255,215,0,0.3)',width:1}},
+                             hovertemplate:'<b>%{x}</b><br>Solar: <b style="color:#FFD700">%{y:.4f} kW/m²</b><extra></extra>'},
                             {name:'📊 Avg Load (kW)', x:months, y:mLoad.map(v=>+v.toFixed(2)),
-                             type:'bar', marker:{color:'rgba(102,126,234,0.75)'}},
+                             type:'bar', marker:{color:'rgba(102,126,234,0.85)',line:{color:'rgba(102,126,234,0.3)',width:1}},
+                             hovertemplate:'<b>%{x}</b><br>Load: <b style="color:#667eea">%{y:.2f} kW</b><extra></extra>'},
                             {name:'🌬️ Avg Wind (m/s)', x:months, y:mWind.map(v=>+v.toFixed(2)),
                              type:'scatter', mode:'lines+markers', yaxis:'y2',
-                             line:{color:'#00BFFF',width:2.5},
-                             marker:{color:'#00BFFF',size:6}},
-                        ], dark, {responsive:true});
+                             line:{color:'#00BFFF',width:2.5,shape:'spline',smoothing:0.6},
+                             marker:{color:'#00BFFF',size:7,symbol:'circle',line:{color:'rgba(255,255,255,0.4)',width:1.5}},
+                             hovertemplate:'<b>%{x}</b><br>Wind: <b style="color:#00BFFF">%{y:.2f} m/s</b><extra></extra>'},
+                        ], dark, {responsive:true, displayModeBar:true, displaylogo:false,
+                                  modeBarButtonsToRemove:['select2d','lasso2d','autoScale2d','toggleSpikelines'],
+                                  toImageButtonOptions:{format:'png',scale:2}});
                     }
                 } catch(e){ console.warn('Monthly chart error:', e); }
 
@@ -1894,14 +1946,25 @@
             Plotly.newPlot('solar_profile_chart', [{
                 x: xLabels, y: rawData.map(v => v/profDiv),
                 type: 'scatter', mode: 'lines',
-                fill: 'tozeroy', fillcolor: 'rgba(255,215,0,0.15)',
-                line: { color: '#FFD700', width: 2 }, name: 'GHI'
+                fill: 'tozeroy', fillcolor: 'rgba(255,215,0,0.12)',
+                line: { color: '#FFD700', width: 2.5, shape:'spline', smoothing:0.6 },
+                name: 'GHI (kW/m²)',
+                hovertemplate:'<b>%{x}</b><br>GHI: <b style="color:#FFD700">%{y:.4f} kW/m²</b><extra></extra>',
             }], {
-                paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
-                xaxis: { title: 'Hour', color: '#fff', gridcolor: 'rgba(255,255,255,0.1)' },
-                yaxis: { title: 'GHI (kW/m²)', color: '#fff', gridcolor: 'rgba(255,255,255,0.1)' },
-                font: { color: '#fff' }
-            }, { responsive: true, displayModeBar: false });
+                paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(8,12,30,0.55)',
+                font:{color:'#c8d8f0',size:12,family:"'IBM Plex Sans',sans-serif"},
+                xaxis:{title:{text:'Hour',font:{color:'#8b9dc3',size:11}}, color:'#8b9dc3',
+                       gridcolor:'rgba(0,180,216,0.09)',tickfont:{color:'#8b9dc3',size:10},
+                       linecolor:'rgba(0,180,216,0.15)',showline:true},
+                yaxis:{title:{text:'GHI (kW/m²)',font:{color:'#8b9dc3',size:11}}, color:'#8b9dc3',
+                       gridcolor:'rgba(0,180,216,0.09)',tickfont:{color:'#8b9dc3',size:10},
+                       linecolor:'rgba(0,180,216,0.15)',showline:true},
+                hoverlabel:{bgcolor:'rgba(6,10,28,0.96)',bordercolor:'rgba(255,215,0,0.4)',
+                            font:{color:'#e8f4ff',size:12}},
+                margin:{t:16,r:20,b:50,l:60},
+            }, { responsive:true, displayModeBar:true, displaylogo:false,
+                 modeBarButtonsToRemove:['select2d','lasso2d','autoScale2d','toggleSpikelines'],
+                 toImageButtonOptions:{format:'png',scale:2} });
         }
 
         function updateWindProfile() {
@@ -1940,14 +2003,25 @@
             Plotly.newPlot('wind_profile_chart', [{
                 x: xLabels, y: rawData,
                 type: 'scatter', mode: 'lines',
-                fill: 'tozeroy', fillcolor: 'rgba(0,191,255,0.15)',
-                line: { color: '#00BFFF', width: 2 }, name: 'Wind Speed'
+                fill: 'tozeroy', fillcolor: 'rgba(0,191,255,0.1)',
+                line: { color: '#00BFFF', width: 2.5, shape:'spline', smoothing:0.6 },
+                name: 'Wind Speed (m/s)',
+                hovertemplate:'<b>%{x}</b><br>Wind: <b style="color:#00BFFF">%{y:.2f} m/s</b><extra></extra>',
             }], {
-                paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
-                xaxis: { title: 'Hour', color: '#fff', gridcolor: 'rgba(255,255,255,0.1)' },
-                yaxis: { title: 'Wind Speed (m/s)', color: '#fff', gridcolor: 'rgba(255,255,255,0.1)' },
-                font: { color: '#fff' }
-            }, { responsive: true, displayModeBar: false });
+                paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(8,12,30,0.55)',
+                font:{color:'#c8d8f0',size:12,family:"'IBM Plex Sans',sans-serif"},
+                xaxis:{title:{text:'Hour',font:{color:'#8b9dc3',size:11}}, color:'#8b9dc3',
+                       gridcolor:'rgba(0,180,216,0.09)',tickfont:{color:'#8b9dc3',size:10},
+                       linecolor:'rgba(0,180,216,0.15)',showline:true},
+                yaxis:{title:{text:'Wind Speed (m/s)',font:{color:'#8b9dc3',size:11}}, color:'#8b9dc3',
+                       gridcolor:'rgba(0,180,216,0.09)',tickfont:{color:'#8b9dc3',size:10},
+                       linecolor:'rgba(0,180,216,0.15)',showline:true},
+                hoverlabel:{bgcolor:'rgba(6,10,28,0.96)',bordercolor:'rgba(0,191,255,0.4)',
+                            font:{color:'#e8f4ff',size:12}},
+                margin:{t:16,r:20,b:50,l:60},
+            }, { responsive:true, displayModeBar:true, displaylogo:false,
+                 modeBarButtonsToRemove:['select2d','lasso2d','autoScale2d','toggleSpikelines'],
+                 toImageButtonOptions:{format:'png',scale:2} });
         }
 
         // ══════════════════════════════════════════════════════════════════
@@ -2297,6 +2371,18 @@
                         }).join('')}
                         </div>
                     </div>` : ''}
+                <!-- ── CHARTS: Optimal Sizing ── -->
+                <div style="display:flex;flex-direction:column;gap:18px;margin-top:18px;">
+                    <div class="card" style="padding:20px 18px 14px;">
+                        <div id="g_config" style="width:100%;height:420px;"></div>
+                    </div>
+                    <div class="card" style="padding:20px 18px 14px;">
+                        <div id="g_bars" style="width:100%;height:420px;"></div>
+                    </div>
+                    <div class="card" style="padding:20px 18px 14px;">
+                        <div id="g_radar" style="width:100%;height:420px;"></div>
+                    </div>
+                </div>
                 </div><!-- /rt_config -->
 
                 <!-- ═══════════ TAB 2 — CAPEX & NPC ═══════════ -->
@@ -2366,6 +2452,15 @@
                             </div>
                         </div>`;
                     })()}
+                <!-- ── CHARTS: CAPEX & NPC ── -->
+                <div style="display:flex;flex-direction:column;gap:18px;margin-top:18px;">
+                    <div class="card" style="padding:20px 18px 14px;">
+                        <div id="g_capex_pie" style="width:100%;height:440px;"></div>
+                    </div>
+                    <div class="card" style="padding:20px 18px 14px;">
+                        <div id="g_conv" style="width:100%;height:440px;"></div>
+                    </div>
+                </div>
                 </div><!-- /rt_capex -->
 
                 <!-- ═══════════ TAB 3 — Logistics & Manpower ═══════════ -->
@@ -2530,6 +2625,18 @@
                         </div>
                         `;
                     })()}
+                <!-- ── CHARTS: CO2 & Environment ── -->
+                <div style="display:flex;flex-direction:column;gap:18px;margin-top:18px;">
+                    <div class="card" style="padding:20px 18px 14px;">
+                        <div id="g_co2bar" style="width:100%;height:420px;"></div>
+                    </div>
+                    <div class="card" style="padding:20px 18px 14px;">
+                        <div id="g_pie" style="width:100%;height:440px;"></div>
+                    </div>
+                    <div class="card" style="padding:20px 18px 14px;">
+                        <div id="g_energy" style="width:100%;height:340px;"></div>
+                    </div>
+                </div>
                 </div><!-- /rt_co2 -->
 
                 <!-- ═══════════ ALWAYS VISIBLE — Performance Summary ═══════════ -->
@@ -2632,7 +2739,7 @@
                 setTimeout(() => {
                     if (window.__lastResults) {
                         window.dispatchEvent(new Event('resize'));
-                        ['g_radar','g_bars','g_config','g_conv','g_pareto','g_energy','g_pie'].forEach(id => {
+                        ['g_config','g_bars','g_radar','g_capex_pie','g_conv','g_co2bar','g_pie','g_energy'].forEach(id => {
                             const el = document.getElementById(id);
                             if (el && typeof Plotly !== 'undefined' && el.data) {
                                 try { Plotly.relayout(id, {autosize:true}); } catch(e) {}
@@ -2809,156 +2916,446 @@
         function generateGraphs(results) {
             if (!results) return;
             if (typeof Plotly === 'undefined') {
-                // Plotly not loaded yet — retry in 500ms
                 setTimeout(() => generateGraphs(results), 500);
                 return;
             }
             window.__lastResults = results;
-            const opt     = results.optimization || results;
-            const pillars = opt.best_pillars || opt.pillars || {};
-            const bestX   = opt.best_x || [];
-            const rel     = opt.reliability_metrics || {};
-            const conv    = opt.convergence || [];
 
-            const varNames = ['PV', 'Wind', 'Battery', 'Electrolyzer', 'H₂', 'Fuel Cell'];
-            const colors   = ['#FFD700','#00BFFF','#667eea','#38ef7d','#ff9f43','#ff6b6b'];
 
-            // Save scroll position — Plotly renders cause layout shifts that jump page up
-            const savedScroll = window.scrollY;
-
+            const opt      = results.optimization || results;
+            const pillars  = opt.best_pillars || opt.pillars || {};
+            const bestX    = Array.isArray(opt.best_x) ? opt.best_x.map(v=>parseFloat(v)||0) : [];
+            const rel      = opt.reliability_metrics || {};
+            const conv     = opt.convergence || [];
+            const lc       = results.lifecycle||results.resource_lifecycle||results.mission_lifecycle||{};
+            const wUsed    = results.weights_used || {};
             const isNSGA   = (opt.algorithm||'').toUpperCase().includes('NSGA');
             const parCases = opt.pareto_cases || [];
-            document.getElementById('graphs_container').innerHTML = `
-                <div class="card full-width">
-                    <h2>📊 Complete Visualization Dashboard
-                        <span style="font-size:0.65em;color:#8b9dc3;font-weight:normal;margin-left:8px;">
-                            ${opt.algorithm||''} · ${(results.mode||'').toUpperCase()} Mode
-                        </span>
-                    </h2>
-                </div>
-                <div class="card"><h2>1. MPBSI Pillars Radar</h2><div id="g_radar" class="chart-container"></div></div>
-                <div class="card"><h2>2. Pillar Bar Chart</h2><div id="g_bars" class="chart-container"></div></div>
-                <div class="card"><h2>3. Optimal System Sizing</h2><div id="g_config" class="chart-container"></div></div>
-                ${conv.length > 0 ? '<div class="card"><h2>4. Convergence Curve</h2><div id="g_conv" class="chart-container"></div></div>' : ''}
-                ${isNSGA && parCases.length > 0 ? '<div class="card full-width"><h2>5. Pareto Front — MPBSI vs NPC</h2><div id="g_pareto" class="chart-container"></div></div>' : ''}
-                <div class="card"><h2>${isNSGA && parCases.length>0 ? '6' : '5'}. Energy Balance Overview</h2><div id="g_energy" class="chart-container"></div></div>
-                <div class="card"><h2>${isNSGA && parCases.length>0 ? '7' : '6'}. Pillar Contribution to MPBSI</h2><div id="g_pie" class="chart-container"></div></div>`;
 
-            const dark = { paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)', font:{color:'#fff'} };
-            const axis = { color:'#fff', gridcolor:'rgba(255,255,255,0.1)' };
+            const pKeys = Object.keys(pillars);
+            const pVals = pKeys.map(k => parseFloat(pillars[k])||0);
 
-            // 1. Radar
-            const pKeys = Object.keys(pillars), pVals = pKeys.map(k => pillars[k]||0);
-            Plotly.newPlot('g_radar', [{
-                type:'scatterpolar', r:[...pVals,pVals[0]], theta:[...pKeys,pKeys[0]],
-                fill:'toself', fillcolor:'rgba(102,126,234,0.3)',
-                line:{color:'#667eea',width:3}, name:'MPBSI Pillars'
-            }], { ...dark, polar:{radialaxis:{visible:true,range:[0,1],color:'#fff',gridcolor:'rgba(255,255,255,0.2)'},angularaxis:{color:'#fff'}} },
-            {responsive:true,displayModeBar:false});
+            // ── shared theme ─────────────────────────────────────────────
+            const BG   = 'rgba(0,0,0,0)';
+            const BASE = {
+                paper_bgcolor: BG, plot_bgcolor: 'rgba(8,12,30,0.55)',
+                font: { family:"'IBM Plex Sans','IBM Plex Mono',monospace", color:'#c8d8f0', size:13 },
+                margin: { t:36, r:32, b:60, l:72 },
+                legend: {
+                    bgcolor:'rgba(6,10,28,0.85)', bordercolor:'rgba(0,180,216,0.18)',
+                    borderwidth:1, font:{color:'#c8d8f0',size:11},
+                    itemsizing:'constant', tracegroupgap:4
+                },
+                hoverlabel: {
+                    bgcolor:'rgba(6,10,28,0.96)', bordercolor:'rgba(0,180,216,0.35)',
+                    font:{color:'#e8f4ff',size:12,family:"'IBM Plex Mono',monospace"}
+                },
+            };
+            const AX = {
+                color:'#8b9dc3',
+                gridcolor:'rgba(0,180,216,0.08)',
+                gridwidth:1,
+                zerolinecolor:'rgba(0,180,216,0.2)',
+                zerolinewidth:1,
+                tickfont:{color:'#8b9dc3',size:11,family:"'IBM Plex Mono',monospace"},
+                linecolor:'rgba(0,180,216,0.15)',
+                linewidth:1,
+                showline:true,
+                mirror:false,
+                ticks:'outside',
+                ticklen:4,
+                tickcolor:'rgba(0,180,216,0.25)',
+            };
+            const CFG = { responsive:true, displayModeBar:true, displaylogo:false,
+                          modeBarButtonsToRemove:['select2d','lasso2d','autoScale2d','toggleSpikelines'],
+                          toImageButtonOptions:{format:'png',scale:2} };
 
-            // 2. Bar chart of pillars
-            Plotly.newPlot('g_bars', [{
-                x: pKeys, y: pVals.map(v => v*100),
-                type:'bar', marker:{color:colors.slice(0, pKeys.length)}, name:'Score (%)'
-            }], { ...dark, xaxis:{...axis,title:'Pillar'}, yaxis:{...axis,title:'Score (%)',range:[0,100]} },
-            {responsive:true,displayModeBar:false});
+            // PLT helper — renders chart with reveal animation
+            let _pltDelay = 0;
+            const PLT = (id, data, layout, cfg=CFG) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                Plotly.newPlot(id, data, {...BASE,...layout}, cfg);
+                el.classList.remove('chart-fresh');
+                setTimeout(() => {
+                    el.classList.add('chart-fresh');
+                    setTimeout(() => el.classList.remove('chart-fresh'), 600);
+                }, _pltDelay);
+                _pltDelay += 40;
+            };
 
-            // 3. System sizing
-            if (Array.isArray(bestX) && bestX.length > 0) {
-                Plotly.newPlot('g_config', [{
-                    x: varNames.slice(0, bestX.length), y: bestX.map(v => parseFloat(v)||0),
-                    type:'bar', marker:{color:colors}, name:'Optimal Sizing'
-                }], { ...dark, xaxis:{...axis,title:'Component'}, yaxis:{...axis,title:'Value (kW/kWh)'} },
-                {responsive:true,displayModeBar:false});
-            }
+            // ── Colour palettes ───────────────────────────────────────────
+            const COL6  = ['#FFD700','#00BFFF','#667eea','#38ef7d','#ff9f43','#ff6b6b'];
+            const PCOL  = { ESI:'#38ef7d', EcSI:'#FFD700', TRI:'#667eea', ORI:'#00e5cc', LSI:'#ff9f43' };
+            const mkColor = k => PCOL[k] || '#a78bfa';
 
-            // 4. Convergence — matches MATLAB BestCost plot (Iteration 1..MaxIt)
-            if (conv.length > 0 && document.getElementById('g_conv')) {
-                const convMin = Math.max(0, Math.min(...conv.filter(v=>v>-1e5)) - 0.05);
-                const convMax = Math.min(1, Math.max(...conv) + 0.02);
-                Plotly.newPlot('g_conv', [{
-                    x: Array.from({length:conv.length},(_,i)=>i+1),
-                    y: conv.map(v => v > -1e5 ? v : null),
-                    type:'scatter', mode:'lines',
-                    line:{color:'#38ef7d',width:2.5},
-                    fill:'tozeroy', fillcolor:'rgba(56,239,125,0.07)',
-                    name:'Best MPBSI', connectgaps: true
+            // ════════════════════════════════════════════════════════════
+            // TAB 1 — OPTIMAL SIZING
+            // ════════════════════════════════════════════════════════════
+
+            // 1a. System sizing horizontal bar
+            if (bestX.length >= 6) {
+                const labels = ['PV Array','Wind','Battery','Electrolyser','H₂ Storage','Fuel Cell'];
+                const units  = ['kWp','kW','kWh','kW','kWh','kW'];
+                const vals   = bestX.slice(0,6);
+                PLT('g_config', [{
+                    y: labels, x: vals, type:'bar', orientation:'h',
+                    marker:{
+                        color: COL6,
+                        opacity: 1,
+                        line:{color:'rgba(255,255,255,0.2)',width:1.5},
+                        pattern:{shape:'',bgcolor:COL6}
+                    },
+                    text: vals.map((v,i) => `<b>${v.toFixed(1)}</b> ${units[i]}`),
+                    textposition:'outside',
+                    textfont:{color:'#d0e4ff',size:13,family:"'IBM Plex Mono',monospace"},
+                    hovertemplate:'<b>%{y}</b><br><span style="color:#FFD700">%{x:.1f}</span><extra></extra>',
+                    name:'Optimal Size',
+                    width: Array(6).fill(0.62),
                 }], {
-                    ...dark,
-                    xaxis:{...axis, title:'Iteration', dtick: Math.ceil(conv.length/8)},
-                    yaxis:{...axis, title:'Best MPBSI Score', range:[convMin, convMax]}
-                }, {responsive:true, displayModeBar:false});
+                    ...BASE,
+                    title:{text:'Optimal Component Sizing',font:{color:'#90b8d8',size:15,family:"'IBM Plex Sans',sans-serif"},x:0.5,xanchor:'center',y:0.98},
+                    margin:{t:48,r:120,b:56,l:120},
+                    xaxis:{...AX, title:{text:'Capacity (units vary)',font:{color:'#8b9dc3',size:11}}, showgrid:true, gridcolor:'rgba(0,180,216,0.1)'},
+                    yaxis:{...AX, showgrid:false, autorange:'reversed', tickfont:{...AX.tickfont,size:12}},
+                    bargap:0.32,
+                    shapes:[{
+                        type:'rect',x0:0,y0:-0.5,x1:0,y1:5.5,
+                        fillcolor:'rgba(0,180,216,0.06)',line:{color:'rgba(0,180,216,0.2)',width:1}
+                    }]
+                });
             }
 
-            // 5. Energy balance bar
-            const resMWh  = rel.total_renewable_MWh || 0;
-            const loadMWh = rel.annual_load_MWh || 0;
-            const curtSemi= rel.curtailed_semi_MWh || 0;
-            const curtNon = rel.curtailed_non_MWh  || 0;
-            Plotly.newPlot('g_energy', [
-                {x:['RES Generation','Load Demand','Curtailed Semi','Curtailed Non'],
-                 y:[resMWh, loadMWh, curtSemi, curtNon],
-                 type:'bar', marker:{color:['#38ef7d','#667eea','#FFD700','#ff6b6b']}, name:'MWh'}
-            ], { ...dark, xaxis:{...axis,title:'Category'}, yaxis:{...axis,title:'MWh/year'} },
-            {responsive:true,displayModeBar:false});
+            // 1b. Pillar score bar — grouped with target line
+            if (pKeys.length > 0) {
+                PLT('g_bars', [
+                    {
+                        x: pKeys, y: pVals.map(v=>+(v*100).toFixed(2)),
+                        type:'bar', name:'Score',
+                        marker:{
+                            color: pKeys.map(k => {
+                                const v=parseFloat(pillars[k])||0;
+                                return v>=0.75?'rgba(56,239,125,0.9)':v>=0.55?'rgba(255,215,0,0.9)':'rgba(255,107,107,0.9)';
+                            }),
+                            line:{color:'rgba(255,255,255,0.2)',width:1.5},
+                        },
+                        text: pVals.map(v=>`<b>${(v*100).toFixed(1)}%</b>`),
+                        textposition:'outside',
+                        textfont:{color:'#d0e4ff',size:13,family:"'IBM Plex Mono',monospace"},
+                        hovertemplate:'<b>%{x}</b><br>Score: <b style="color:#FFD700">%{y:.2f}%</b><extra></extra>',
+                        width: Array(pKeys.length).fill(0.55),
+                    },
+                    {
+                        x: pKeys, y: Array(pKeys.length).fill(75),
+                        type:'scatter', mode:'lines', name:'Target (75%)',
+                        line:{color:'rgba(167,139,250,0.7)',width:2,dash:'dot'},
+                        hoverinfo:'skip'
+                    }
+                ], {
+                    ...BASE,
+                    title:{text:'MPBSI Pillar Scores',font:{color:'#90b8d8',size:15,family:"'IBM Plex Sans',sans-serif"},x:0.5,xanchor:'center',y:0.98},
+                    margin:{t:48,r:28,b:60,l:64},
+                    xaxis:{...AX, showgrid:false, tickfont:{...AX.tickfont,size:12}},
+                    yaxis:{...AX, title:{text:'Score (%)',font:{color:'#8b9dc3',size:11}},
+                           range:[0,115], showgrid:true, gridcolor:'rgba(0,180,216,0.1)'},
+                    bargap:0.38, showlegend:true,
+                });
+            }
 
-            // 6. Pillar contribution pie — use backend weights_used (actual weights PSO ran with)
-            const wUsed = results.weights_used || {};
-            const w = { TRI:  wUsed.w_tri  ?? parseFloat(document.getElementById('w_tri')?.value)  ?? 0.25,
-                        EcSI: wUsed.w_ecsi ?? parseFloat(document.getElementById('w_ecsi')?.value) ?? 0.25,
-                        ORI:  wUsed.w_ori  ?? parseFloat(document.getElementById('w_ori')?.value)  ?? 0.15,
-                        LSI:  wUsed.w_lsi  ?? parseFloat(document.getElementById('w_lsi')?.value)  ?? 0.15,
-                        ESI:  wUsed.w_esi  ?? parseFloat(document.getElementById('w_esi')?.value)  ?? 0.10 };
-            Plotly.newPlot('g_pie', [{
-                labels: pKeys,
-                values: pKeys.map(k => ((pillars[k]||0) * (w[k]||0.1) * 100)),
-                type: 'pie',
-                marker: { colors: colors },
-                textinfo: 'label+percent',
-                hole: 0.4
-            }], { ...dark, title:{text:'Weighted Pillar Contribution',font:{color:'#fff'}} },
-            {responsive:true,displayModeBar:false});
+            // 1c. Radar chart — polished
+            if (pKeys.length > 0) {
+                const rVals = [...pVals, pVals[0]];
+                const rKeys = [...pKeys, pKeys[0]];
+                PLT('g_radar', [
+                    {
+                        type:'scatterpolar', r: rVals.map(v=>+(v*100).toFixed(2)),
+                        theta: rKeys, fill:'toself',
+                        fillcolor:'rgba(102,126,234,0.22)',
+                        line:{color:'#7a9fff',width:2.5},
+                        marker:{color:'#7a9fff',size:7,symbol:'circle',
+                                line:{color:'rgba(255,255,255,0.5)',width:1.5}},
+                        name:'Score',
+                        hovertemplate:'<b>%{theta}</b>: %{r:.1f}%<extra></extra>'
+                    },
+                    {
+                        type:'scatterpolar',
+                        r: Array(rKeys.length).fill(75),
+                        theta: rKeys, fill:'toself',
+                        fillcolor:'rgba(167,139,250,0.07)',
+                        line:{color:'rgba(167,139,250,0.5)',width:1.5,dash:'dot'},
+                        name:'Target 75%', hoverinfo:'skip'
+                    }
+                ], {
+                    ...BASE,
+                    title:{text:'Pillar Radar',font:{color:'#90b8d8',size:15,family:"'IBM Plex Sans',sans-serif"},x:0.5,xanchor:'center',y:0.98},
+                    margin:{t:52,r:60,b:40,l:60},
+                    polar:{
+                        bgcolor:'rgba(8,14,40,0.6)',
+                        radialaxis:{visible:true, range:[0,100], ticksuffix:'%',
+                                    color:'#8b9dc3', gridcolor:'rgba(0,180,216,0.12)',
+                                    linecolor:'rgba(0,180,216,0.15)',
+                                    tickfont:{color:'#8b9dc3',size:10,family:"'IBM Plex Mono',monospace"}},
+                        angularaxis:{color:'#8b9dc3', gridcolor:'rgba(0,180,216,0.15)',
+                                     linecolor:'rgba(0,180,216,0.2)',
+                                     tickfont:{color:'#c8d8f0',size:13,family:"'IBM Plex Sans',sans-serif"}}
+                    },
+                    showlegend:false
+                });
+            }
 
-            // 7. Pareto front (NSGA-II only)
-            if (isNSGA && parCases.length > 0 && document.getElementById('g_pareto')) {
-                const pX = parCases.map(c => c.npc_scaled || 0);
-                const pY = parCases.map(c => c.mpbsi || 0);
-                const pL = parCases.map(c => (c.label||'').replace(' – ','<br>'));
-                const pC = ['#38ef7d','#FFD700','#ff9f43'];
-                Plotly.newPlot('g_pareto', [{
-                    x: pX, y: pY, mode: 'markers+text',
-                    text: ['A','B','C'], textposition: 'top center',
-                    marker: { color: pC, size: 18, symbol: 'star',
-                               line: { color: '#fff', width: 2 } },
-                    type: 'scatter', name: 'Pareto Cases',
-                    hovertemplate: '<b>%{text}</b><br>MPBSI: %{y:.4f}<br>NPC: ₹%{x:.2f} Cr<extra></extra>'
+            // ════════════════════════════════════════════════════════════
+            // TAB 2 — CAPEX & NPC
+            // ════════════════════════════════════════════════════════════
+
+            // 2a. CAPEX donut pie with labels + values
+            if (bestX.length >= 6) {
+                const costs  = [55000,120000,15000,70000,15000,110000];
+                const cLabels= ['PV Array','Wind Turbines','Battery','Electrolyser','H₂ Storage','Fuel Cell'];
+                const cVals  = bestX.slice(0,6).map((v,i)=>v*costs[i]/1e7); // Rs. Cr
+                const totalC = cVals.reduce((a,b)=>a+b,0);
+                PLT('g_capex_pie', [{
+                    labels: cLabels,
+                    values: cVals.map(v=>+v.toFixed(3)),
+                    type:'pie', hole:0.46,
+                    marker:{
+                        colors: COL6,
+                        line:{color:'rgba(4,7,15,0.9)',width:3}
+                    },
+                    textinfo:'label+percent',
+                    textfont:{color:'#fff',size:11,family:"'IBM Plex Sans',sans-serif"},
+                    hovertemplate:'<b>%{label}</b><br>₹%{value:.2f} Cr<br><b>%{percent}</b><extra></extra>',
+                    direction:'clockwise',
+                    rotation:30,
+                    pull:[0.03,0,0,0,0,0],
+                    domain:{ x:[0, 0.55], y:[0.04, 0.96] },
                 }], {
-                    ...dark,
-                    xaxis: { ...axis, title: 'NPC (₹ Cr) — Minimize →' },
-                    yaxis: { ...axis, title: '← Maximize — MPBSI Score' },
-                    annotations: parCases.map((c,i) => ({
-                        x: pX[i], y: pY[i],
-                        text: (c.label||'').split(' – ')[0],
-                        showarrow: false, yshift: 20,
-                        font: { color: pC[i], size: 11 }
-                    }))
-                }, { responsive: true, displayModeBar: false });
-            }
-
-            // Restore scroll position — Plotly layout shifts cause the page to jump up
-            requestAnimationFrame(() => { window.scrollTo(0, savedScroll); });
-            setTimeout(() => {
-                window.scrollTo(0, savedScroll);
-                // Force Plotly to recalculate dimensions — critical when tab was hidden during render
-                window.dispatchEvent(new Event('resize'));
-                ['g_radar','g_bars','g_config','g_conv','g_pareto','g_energy','g_pie'].forEach(id => {
-                    const el = document.getElementById(id);
-                    if (el && typeof Plotly !== 'undefined') {
-                        try { Plotly.relayout(id, {}); } catch(e) {}
+                    ...BASE,
+                    title:{text:'CAPEX Distribution',font:{color:'#90b8d8',size:15,family:"'IBM Plex Sans',sans-serif"},x:0.5,xanchor:'center',y:0.99},
+                    margin:{t:44,r:10,b:16,l:10},
+                    annotations:[{
+                        text:'<b>₹' + totalC.toFixed(1) + '</b><br>Crore',
+                        x:0.30, y:0.5, showarrow:false,
+                        font:{color:'#FFD700',size:15,family:"'IBM Plex Mono',monospace"}
+                    }],
+                    legend:{
+                        ...BASE.legend,
+                        orientation:'v',
+                        x:0.58, y:0.5,
+                        xanchor:'left',
+                        yanchor:'middle',
+                        font:{...BASE.legend.font, size:13},
                     }
                 });
-            }, 400);
+            }
+
+            // 2b. Convergence curve OR NPC stack bar
+            if (conv.length > 0) {
+                const validConv = conv.filter(v=>v>-1e5);
+                const minV = Math.max(0, Math.min(...validConv)-0.03);
+                const maxV = Math.min(1, Math.max(...validConv)+0.03);
+                PLT('g_conv', [{
+                    x: Array.from({length:conv.length},(_,i)=>i+1),
+                    y: conv.map(v=>v>-1e5?+v.toFixed(6):null),
+                    type:'scatter', mode:'lines',
+                    line:{color:'#38ef7d',width:2.5,shape:'spline',smoothing:0.8},
+                    fill:'tozeroy',
+                    fillcolor:'rgba(56,239,125,0.08)',
+                    name:'Best MPBSI', connectgaps:true,
+                    hovertemplate:'Iter <b>%{x}</b>: <b style="color:#38ef7d">%{y:.6f}</b><extra></extra>'
+                }], {
+                    ...BASE,
+                    title:{text:'PSO Convergence Curve',font:{color:'#90b8d8',size:15,family:"'IBM Plex Sans',sans-serif"},x:0.5,xanchor:'center',y:0.98},
+                    margin:{t:52,r:32,b:64,l:76},
+                    xaxis:{...AX, title:{text:'Iteration',font:{color:'#8b9dc3',size:11}},
+                           dtick:Math.ceil(conv.length/8), showgrid:true},
+                    yaxis:{...AX, title:{text:'MPBSI Score',font:{color:'#8b9dc3',size:11}},
+                           range:[minV,maxV], showgrid:true},
+                });
+            } else {
+                // NPC stack bar when no convergence data
+                const bx2  = bestX.slice(0,6);
+                const costs2 = [55000,120000,15000,70000,15000,110000];
+                const cap2   = bx2.reduce((s,v,i)=>s+v*costs2[i],0);
+                const r2=0.08,n2=20,om2=0.02,ann2=(1-Math.pow(1+r2,-n2))/r2;
+                const npcParts = {
+                    'CAPEX':         cap2/1e7,
+                    'O&M NPV':      ((lc.OM_NPV_crore||0)||om2*cap2*ann2/1e7),
+                    'Replacement':   (lc.Replacement_NPV_crore||0),
+                    'Personnel':     (lc.Personnel_NPV_crore||0),
+                };
+                const nKeys = Object.keys(npcParts).filter(k=>npcParts[k]>0);
+                const barColors = ['#667eea','#38ef7d','#FFD700','#ff9f43'];
+                PLT('g_conv', [{
+                    x: nKeys, y: nKeys.map(k=>+parseFloat(npcParts[k]).toFixed(2)),
+                    type:'bar',
+                    marker:{
+                        color: barColors.slice(0,nKeys.length),
+                        opacity:0.92,
+                        line:{color:'rgba(255,255,255,0.15)',width:1.5}
+                    },
+                    text: nKeys.map(k=>`<b>₹${parseFloat(npcParts[k]).toFixed(2)} Cr</b>`),
+                    textposition:'outside',
+                    textfont:{color:'#d0e4ff',size:11,family:"'IBM Plex Mono',monospace"},
+                    hovertemplate:'<b>%{x}</b>: ₹%{y:.2f} Cr<extra></extra>',
+                    name:'NPC Stack',
+                    width: Array(nKeys.length).fill(0.55),
+                }], {
+                    ...BASE,
+                    title:{text:'20-Year NPC Stack',font:{color:'#90b8d8',size:15,family:"'IBM Plex Sans',sans-serif"},x:0.5,xanchor:'center',y:0.98},
+                    margin:{t:52,r:32,b:64,l:76},
+                    xaxis:{...AX, showgrid:false, tickfont:{...AX.tickfont,size:12}},
+                    yaxis:{...AX, title:{text:'₹ Crore',font:{color:'#8b9dc3',size:11}}, showgrid:true},
+                });
+            }
+
+            // ════════════════════════════════════════════════════════════
+            // TAB 5 — CO2 & ENVIRONMENT
+            // ════════════════════════════════════════════════════════════
+
+            // 5a. CO2 avoidance timeline — grouped bar with annotation
+            const co2yr = parseFloat(lc.CO2_avoided_ton_yr||lc.Annual_CO2_ton||0);
+            const co2lt = parseFloat(lc.Lifetime_CO2_Reduction||0)||co2yr*20;
+            if (co2yr > 0 || co2lt > 0) {
+                const yrs   = [1,5,10,15,20];
+                const co2Yr = yrs.map(y => +(co2yr*y).toFixed(0));
+                PLT('g_co2bar', [{
+                    x: yrs.map(y=>'Year '+y),
+                    y: co2Yr,
+                    type:'bar',
+                    marker:{
+                        color: yrs.map((_,i)=>`rgba(56,239,125,${0.45+i*0.13})`),
+                        line:{color:'rgba(56,239,125,0.4)',width:1.5},
+                        cornerradius: 4,
+                    },
+                    text: co2Yr.map(v=>`<b>${v.toLocaleString()} t</b>`),
+                    textposition:'outside',
+                    textfont:{color:'#d0e4ff',size:11,family:"'IBM Plex Mono',monospace"},
+                    hovertemplate:'<b>%{x}</b><br>CO₂ Avoided: <b style="color:#38ef7d">%{y:,} ton</b><extra></extra>',
+                    name:'Cumulative CO₂ Avoided',
+                    width: Array(5).fill(0.55),
+                }], {
+                    ...BASE,
+                    title:{text:'Cumulative CO₂ Avoidance',font:{color:'#90b8d8',size:15,family:"'IBM Plex Sans',sans-serif"},x:0.5,xanchor:'center',y:0.98},
+                    margin:{t:52,r:32,b:64,l:76},
+                    xaxis:{...AX, showgrid:false, tickfont:{...AX.tickfont,size:12}},
+                    yaxis:{...AX, title:{text:'CO₂ Avoided (ton)',font:{color:'#8b9dc3',size:11}}, showgrid:true},
+                    annotations:[{
+                        x:'Year 20', y:co2yr*20,
+                        text:`<b>${(co2yr*20).toLocaleString()} ton<br>lifetime</b>`,
+                        showarrow:true, arrowhead:2, arrowcolor:'#38ef7d',
+                        arrowwidth:2,
+                        font:{color:'#38ef7d',size:11,family:"'IBM Plex Mono',monospace"}, ay:-40, ax:0,
+                        bgcolor:'rgba(4,8,20,0.88)', bordercolor:'rgba(56,239,125,0.5)', borderwidth:1,
+                        borderpad:5,
+                    }]
+                });
+            }
+
+            // 5b. Pillar contribution donut
+            if (pKeys.length > 0) {
+                const wMap = {
+                    TRI: wUsed.w_tri??0.30, EcSI:wUsed.w_ecsi??0.20,
+                    ORI: wUsed.w_ori??0.25, LSI: wUsed.w_lsi??0.20, ESI:wUsed.w_esi??0.05
+                };
+                const wContribs = pKeys.map(k => +((parseFloat(pillars[k])||0)*(wMap[k]||0.1)*100).toFixed(3));
+                PLT('g_pie', [{
+                    labels: pKeys, values: wContribs, type:'pie', hole:0.46,
+                    marker:{
+                        colors: pKeys.map(k=>mkColor(k)),
+                        line:{color:'rgba(4,7,15,0.9)',width:3}
+                    },
+                    textinfo:'label+percent',
+                    textfont:{color:'#fff',size:11,family:"'IBM Plex Sans',sans-serif"},
+                    hovertemplate:'<b>%{label}</b><br>Weighted: <b>%{value:.2f}</b><br><b>%{percent}</b><extra></extra>',
+                    direction:'clockwise',
+                    pull: pKeys.map((_,i)=>i===0?0.04:0),
+                    domain:{ x:[0, 0.55], y:[0.04, 0.96] },
+                }], {
+                    ...BASE,
+                    title:{text:'Pillar Contribution to MPBSI',font:{color:'#90b8d8',size:15,family:"'IBM Plex Sans',sans-serif"},x:0.5,xanchor:'center',y:0.99},
+                    margin:{t:44,r:10,b:16,l:10},
+                    annotations:[{
+                        text:'<b>MPBSI<br>' + ((opt.best_mpbsi??opt.mpbsi)??0).toFixed(4) + '</b>',
+                        x:0.275, y:0.5, showarrow:false,
+                        font:{color:'#FFD700',size:14,family:"'IBM Plex Mono',monospace"}
+                    }],
+                    legend:{
+                        ...BASE.legend,
+                        orientation:'v',
+                        x:0.58, y:0.5,
+                        xanchor:'left',
+                        yanchor:'middle',
+                        font:{...BASE.legend.font, size:13},
+                    }
+                });
+            }
+
+            // 5c. Energy balance — stacked horizontal bars
+            const resMWh   = parseFloat(rel.total_renewable_MWh)||0;
+            const loadMWh  = parseFloat(rel.annual_load_MWh)||0;
+            const curtSemi = parseFloat(rel.curtailed_semi_MWh)||0;
+            const curtNon  = parseFloat(rel.curtailed_non_MWh)||0;
+            const net      = Math.max(resMWh - curtSemi - curtNon, 0);
+            if (resMWh > 0 || loadMWh > 0) {
+                PLT('g_energy', [
+                    {
+                        name:'Net Delivered', y:['Generation'], x:[+net.toFixed(1)],
+                        type:'bar', orientation:'h',
+                        marker:{color:'rgba(56,239,125,0.88)',line:{color:'rgba(255,255,255,0.15)',width:1.5}},
+                        text:[`<b>${net.toFixed(1)} MWh</b>`], textposition:'inside',
+                        textfont:{color:'#04070f',size:11,family:"'IBM Plex Mono',monospace"},
+                        hovertemplate:'<b>Net Delivered</b>: %{x:.1f} MWh<extra></extra>',
+                    },
+                    {
+                        name:'Curtailed Semi', y:['Generation'], x:[+curtSemi.toFixed(1)],
+                        type:'bar', orientation:'h',
+                        marker:{color:'rgba(255,215,0,0.8)',line:{color:'rgba(255,255,255,0.1)',width:1}},
+                        text:[curtSemi>0?`${curtSemi.toFixed(1)} MWh`:''],
+                        textposition:'inside', textfont:{color:'#04070f',size:10},
+                        hovertemplate:'<b>Curtailed (Semi)</b>: %{x:.1f} MWh<extra></extra>',
+                    },
+                    {
+                        name:'Curtailed Non-Crit', y:['Generation'], x:[+curtNon.toFixed(1)],
+                        type:'bar', orientation:'h',
+                        marker:{color:'rgba(255,107,107,0.8)',line:{color:'rgba(255,255,255,0.1)',width:1}},
+                        text:[curtNon>0?`${curtNon.toFixed(1)} MWh`:''],
+                        textposition:'inside', textfont:{color:'#fff',size:10},
+                        hovertemplate:'<b>Curtailed (Non-Crit)</b>: %{x:.1f} MWh<extra></extra>',
+                    },
+                    {
+                        name:'Load Demand', y:['Load'], x:[+loadMWh.toFixed(1)],
+                        type:'bar', orientation:'h',
+                        marker:{color:'rgba(102,126,234,0.88)',line:{color:'rgba(255,255,255,0.15)',width:1.5}},
+                        text:[`<b>${loadMWh.toFixed(1)} MWh</b>`], textposition:'inside',
+                        textfont:{color:'#fff',size:11,family:"'IBM Plex Mono',monospace"},
+                        hovertemplate:'<b>Load Demand</b>: %{x:.1f} MWh<extra></extra>',
+                    }
+                ], {
+                    ...BASE,
+                    title:{text:'Annual Energy Balance',font:{color:'#90b8d8',size:15,family:"'IBM Plex Sans',sans-serif"},x:0.5,xanchor:'center',y:0.98},
+                    barmode:'stack',
+                    margin:{t:52,r:32,b:64,l:100},
+                    xaxis:{...AX, title:{text:'MWh / year',font:{color:'#8b9dc3',size:11}}, showgrid:true},
+                    yaxis:{...AX, showgrid:false, tickfont:{...AX.tickfont,size:12}},
+                    showlegend:true
+                });
+            }
+
+            // ── Resize all after render (ensures correct width) ───────────
+            setTimeout(() => {
+                window.dispatchEvent(new Event('resize'));
+                ['g_config','g_bars','g_radar','g_capex_pie','g_conv',
+                 'g_co2bar','g_pie','g_energy',
+                 'capex_pie_chart','npc_bar_chart','summary_monthly_chart',
+                 'solar_profile_chart','wind_profile_chart'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el && typeof Plotly !== 'undefined' && el.data) {
+                        try { Plotly.relayout(id, {autosize:true}); } catch(e) {}
+                    }
+                });
+            }, 380);
         }
+
 
         function displayGenerationMetrics(solarData, windData, loadData) {
             // Called after upload to update UI stats — no computation
@@ -3767,35 +4164,75 @@
             if (!c) return;
             const { CAPEX, NPC, Cost_PV, Cost_WT, Cost_Bat, Cost_EL, Cost_H2, Cost_FC,
                     Bat_repl, FC_repl, EL_repl, OM_PV, fp } = c;
-            const dark = { paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)', font:{color:'#fff'} };
+            const COL6 = ['#FFD700','#00BFFF','#667eea','#38ef7d','#a78bfa','#ff6b6b'];
+            const dark = {
+                paper_bgcolor:'rgba(0,0,0,0)',
+                plot_bgcolor:'rgba(8,12,30,0.55)',
+                font:{color:'#c8d8f0',size:12,family:"'IBM Plex Sans',sans-serif"},
+                hoverlabel:{bgcolor:'rgba(6,10,28,0.96)',bordercolor:'rgba(0,180,216,0.35)',
+                            font:{color:'#e8f4ff',size:12}}
+            };
+            const axStyle = {
+                color:'#8b9dc3', gridcolor:'rgba(0,180,216,0.09)',
+                zerolinecolor:'rgba(0,180,216,0.18)',
+                tickfont:{color:'#8b9dc3',size:11,family:"'IBM Plex Mono',monospace"},
+                linecolor:'rgba(0,180,216,0.15)', showline:true,
+            };
+            const cfg = { responsive:true, displayModeBar:true, displaylogo:false,
+                          modeBarButtonsToRemove:['select2d','lasso2d','autoScale2d','toggleSpikelines'],
+                          toImageButtonOptions:{format:'png',scale:2} };
             const savedScroll = window.scrollY;
 
             // CAPEX pie
             if (document.getElementById('capex_pie_chart')) {
+                const totalC = [Cost_PV, Cost_WT, Cost_Bat, Cost_EL, Cost_H2, Cost_FC].reduce((a,b)=>a+b,0);
                 Plotly.newPlot('capex_pie_chart', [{
-                    labels: ['PV', 'Wind', 'Battery', 'Electrolyzer', 'H2 Storage', 'Fuel Cell'],
-                    values: [Cost_PV, Cost_WT, Cost_Bat, Cost_EL, Cost_H2, Cost_FC],
-                    type: 'pie', hole: 0.42,
-                    marker: { colors: ['#FFD700','#00BFFF','#667eea','#38ef7d','#a78bfa','#ff6b6b'] },
-                    textinfo: 'label+percent', textfont: { color: '#fff', size: 11 },
-                }], { ...dark, title: { text:'CAPEX Distribution', font:{color:'#a78bfa',size:13} },
-                      margin:{t:40,b:10,l:10,r:10} }, { responsive:true, displayModeBar:false });
+                    labels: ['PV Array','Wind','Battery','Electrolyzer','H₂ Storage','Fuel Cell'],
+                    values: [Cost_PV, Cost_WT, Cost_Bat, Cost_EL, Cost_H2, Cost_FC].map(v=>+(v/1e7).toFixed(3)),
+                    type:'pie', hole:0.46,
+                    marker:{ colors:COL6, line:{color:'rgba(4,7,15,0.9)',width:3} },
+                    textinfo:'label+percent',
+                    textfont:{color:'#fff',size:11,family:"'IBM Plex Sans',sans-serif"},
+                    hovertemplate:'<b>%{label}</b><br>₹%{value:.2f} Cr (%{percent})<extra></extra>',
+                    direction:'clockwise', rotation:30,
+                    domain:{ x:[0, 0.55], y:[0.04, 0.96] },
+                }], {
+                    ...dark,
+                    title:{text:'CAPEX Distribution',font:{color:'#90b8d8',size:13,family:"'IBM Plex Sans',sans-serif"},x:0.5,xanchor:'center'},
+                    margin:{t:44,r:10,b:16,l:10},
+                    annotations:[{
+                        text:'<b>₹' + (totalC/1e7).toFixed(1) + '</b><br>Crore',
+                        x:0.30,y:0.5,showarrow:false,
+                        font:{color:'#FFD700',size:15,family:"'IBM Plex Mono',monospace"}
+                    }],
+                    legend:{bgcolor:'rgba(6,10,28,0.85)',bordercolor:'rgba(0,180,216,0.18)',
+                            borderwidth:1,font:{color:'#c8d8f0',size:11},
+                            orientation:'v',x:0.63,y:0.5,xanchor:'left',yanchor:'middle'}
+                }, cfg);
             }
 
             // NPC bar
             if (document.getElementById('npc_bar_chart')) {
-                const labels = ['CAPEX', `Bat Repl\n(yr${fp.bat_replace_yr})`, 'FC Repl\n(yr10)', 'EL Repl\n(yr15)', `O&M\n(${fp.lifetime}yr PV)`];
-                const vals   = [CAPEX, Bat_repl, FC_repl, EL_repl, OM_PV].map(v => v/1e7);
+                const labels = ['CAPEX', `Bat Repl (yr${fp.bat_replace_yr})`, 'FC Repl (yr10)', 'EL Repl (yr15)', `O&M (${fp.lifetime}yr)`];
+                const vals   = [CAPEX, Bat_repl, FC_repl, EL_repl, OM_PV].map(v => +(v/1e7).toFixed(3));
+                const colors = ['#667eea','#fbbf24','#fb923c','#f87171','#34d399'];
                 Plotly.newPlot('npc_bar_chart', [{
-                    x: labels, y: vals, type: 'bar', name: 'Cr ₹',
-                    marker: { color: ['#667eea','#fbbf24','#fb923c','#f87171','#34d399'],
-                              opacity: 0.85, line: { width: 1, color: '#fff' } },
-                    text: vals.map(v => v.toFixed(2)+'Cr'), textposition: 'outside', textfont:{color:'#fff'},
-                }], { ...dark,
-                      title: { text:'NPC Cost Components (Cr ₹)', font:{color:'#a78bfa',size:13} },
-                      xaxis: { color:'#fff', gridcolor:'rgba(255,255,255,0.08)' },
-                      yaxis: { color:'#fff', gridcolor:'rgba(255,255,255,0.08)', title:'Crore ₹' },
-                      margin:{t:40,b:60,l:60,r:20} }, { responsive:true, displayModeBar:false });
+                    x:labels, y:vals, type:'bar', name:'₹ Crore',
+                    marker:{ color:colors, opacity:0.92, line:{width:1.5,color:'rgba(255,255,255,0.18)'} },
+                    text:vals.map(v=>`<b>₹${v.toFixed(2)} Cr</b>`),
+                    textposition:'outside',
+                    textfont:{color:'#d0e4ff',size:11,family:"'IBM Plex Mono',monospace"},
+                    hovertemplate:'<b>%{x}</b>: <b style="color:#FFD700">₹%{y:.2f} Cr</b><extra></extra>',
+                    width:Array(5).fill(0.55),
+                }], {
+                    ...dark,
+                    title:{text:'NPC Cost Components',font:{color:'#90b8d8',size:13,family:"'IBM Plex Sans',sans-serif"},x:0.5,xanchor:'center'},
+                    xaxis:{...axStyle, showgrid:false, tickfont:{...axStyle.tickfont,size:11}},
+                    yaxis:{...axStyle, title:{text:'₹ Crore',font:{color:'#8b9dc3',size:11}},
+                           showgrid:true, gridcolor:'rgba(0,180,216,0.09)'},
+                    margin:{t:48,r:24,b:68,l:68},
+                    bargap:0.38,
+                }, cfg);
             }
 
             // Restore scroll after Plotly reflows

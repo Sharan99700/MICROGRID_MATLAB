@@ -1,18 +1,123 @@
 """
-MPBSI Framework Backend v5.4 — MATLAB-Aligned NSGA-II
-All fixes applied to bring NSGA-II results as close as possible to MATLAB gamultiobj.
+MPBSI Framework Backend v5.7 — MATLAB MPBSI_Evaluator_Resource_Land.m Exact Match
 
-KEY NSGA-II FIXES:
-  FIX-E [nsga_objective_resource + _eval resource branch]: Removed spurious autonomy
-         penalty (Aut>3 → NPC×=1.05×(aut-3)) that had NO equivalent in MATLAB
-         NSGA_Objective_Resource.m or NSGA_MASTER_RESOURCE.m.
-         This was the primary cause of wind and H₂ under-sizing in resource mode:
-         the penalty discouraged H₂ storage and pushed toward BESS-heavy solutions.
+RESOURCE MODE: COMPLETE RE-ALIGNMENT WITH MATLAB SOURCE (v5.7)
+Source: MPBSI_Evaluator_Resource_Land.m (final confirmed MATLAB evaluator)
+
+  REVERT-H2CAP [mpbsi_evaluator_resource]:
+         RESTORED: H2_effective = min(x[4], x[3]*24)  (MATLAB line 65)
+         v5.5 incorrectly removed this cap believing it was "wrong".
+         The cap IS CORRECT — it forces optimizer to size EL large enough to fill
+         H2 tank within 24 h.  Without cap: Python chose H2=9999 kWh, EL=21 kW
+         (H2_eff only 516 kWh — 95% loss).  MATLAB correctly finds EL=164 kW, H2=3426 kWh
+         (EL×24=3936 > H2 → full H2 credit).  Deviation: EL off by −87%, H2 off by +192%.
+         usable_storage = (0.95-0.20)×x[2] + H2_effective×eta_FC  (MATLAB exact)
+
+  REVERT-T2 [mpbsi_evaluator_resource — TRI]:
+         RESTORED: T2 = 1-exp(-sim.autonomy_days/1.5)  (MATLAB line 112)
+         v5.6 changed T2 to use storage_ratio — WRONG.  MATLAB uses Results.Autonomy_days
+         from dispatch (0.80×BESS + E_H2_max×eta_FC full H2, uncapped).
+         T2 (dispatch/uncapped) rewards theoretical max autonomy.
+         T4 (storage_ratio/capped) rewards EL-constrained practical storage.
+         This deliberate difference is present in MATLAB and must be preserved.
+
+  REVERT-T3 [mpbsi_evaluator_resource — TRI]:
+         RESTORED: redundancy = x[2]/1000 + x[5]/100  (MATLAB line 114, BESS+FC only)
+         v5.6 added H2 to T3 — WRONG.  MATLAB T3 does NOT include H2.
+
+  REVERT-L5 [mpbsi_evaluator_resource — LSI]:
+         RESTORED: L5 = 1-exp(-x[2]/2000)  (MATLAB line 146, BESS only)
+         v5.6 changed L5 to use usable_storage — WRONG.  MATLAB L5 is BESS-only.
+
+  FIX-FEASIBILITY-EVAL [mpbsi_evaluator_resource]:
+         MATLAB evaluator checks: LPSP_critical > 1e-4 OR Annual_RES < Annual_Load
+         (Renewable_ratio >= 1.0, NOT 0.99).  Python was using sim.is_feasible
+         (dispatch flag, 0.99 threshold).  Fixed to check total_renewable < annual_load.
+
+  FIX-CV-RESOURCE [nsga2_optimize _cv resource branch]:
+         Updated constraint-violation threshold from 0.99 to 1.0 to match evaluator.
+
+ROOT CAUSE SUMMARY: The H2/EL imbalance (Python: H2≫MATLAB, EL≪MATLAB) was entirely
+caused by removing H2_effective cap in v5.5.  Without the cap, the optimizer exploited
+the MPBSI reward for large H2 tanks while keeping EL tiny (cheap NPC).  With cap restored,
+the optimizer must size EL to match H2 tank (EL×24 ≥ H2), exactly replicating MATLAB.
+
+RESOURCE MODE WIND & H2 UNDER-SIZING — ORIGINAL FIXES (v5.5):
+
+  FIX-AUT-PENALTY [nsga2_optimize _eval resource + nsga_objective_resource]:
+         Restored autonomy economic penalty (Penalty_factor=0.05, limit=3 days):
+           if Autonomy_days > 3: NPC *= (1 + 0.05*(Autonomy_days - 3))
+         From MATLAB NSGA_Objective_Resource.m; uses full H2 (not H2_effective).
+
+KEY NSGA-II FIXES (v5.0 — original):
+  1. PSO mission seed: rng(12); PSO resource: rng(16)
+  2. NSGA resource renewable_ratio: >= 1.0 in evaluator (>= 0.99 in dispatch)
+  3. NSGA n_pop=80, max_gen=60
+
+MATLAB NSGA BOUNDS:
+  Resource: PV=[0, Land/10], Wind=[0, Land/15], BESS=[0, 10×CritDaily],
+            H2=[0, 8×CritDaily/η_FC], EL=[0, PV_max+Wind_max],
+            FC=[0.5×CritPeak, 1.5×CritPeak]
+
+RESOURCE MODE BATTERY TOO HIGH / H2 TOO LOW — ROOT CAUSES AND FIXES (v5.6):
+
+  FIX-T2 [mpbsi_evaluator_resource — TRI block]:
+         T2 changed from sim.autonomy_days (dispatch: 0.80xBESS factor) to
+         storage_ratio (design formula: 0.75xBESS), matching NSGA_MASTER_RESOURCE
+         and the NPC autonomy penalty.  The dispatch SOC_max=E_BESS gives a 0.80
+         factor (battery charges to 100%), but MATLAB NSGA_MASTER and evaluator use
+         (0.95-0.20)=0.75.  Using 0.80 in T2 gave battery a 6.7%/kWh structural
+         advantage over H2 in T2 (and aliased R1, L2), cumulatively biasing the
+         optimiser toward BESS over H2.
+
+  FIX-T3 [mpbsi_evaluator_resource — TRI block]:
+         T3 redundancy changed from BESS-only (x[2]/1000 + x[5]/100) to include H2:
+           redundancy = 0.75xBESS/1000 + H2xeta_FC/1000 + x[5]/100
+         Old formula had NO H2 term: T3 was a pure battery-size reward.
+         With T3 weight=0.20 in TRI, TRI weight=0.30 in MPBSI -> 6% of MPBSI
+         was purely from battery.  At realistic sizes (BESS=2000, H2=10000):
+         T3 gains +0.153, L5 gains +0.338, total MPBSI shift = +0.0186.
+
+  FIX-L5 [mpbsi_evaluator_resource — LSI block]:
+         L5 changed from BESS-only (1-exp(-x[2]/2000)) to combined usable_storage:
+           L5 = 1 - exp(-usable_storage / 2000)
+         where usable_storage = 0.75xBESS + H2xeta_FC (same as all other metrics).
+         Old L5 gave H2 zero credit regardless of H2 size.  LSI weight=0.15
+         for L5, MPBSI weight=0.20 = 3% of MPBSI from battery alone.
+
+RESOURCE MODE WIND & H2 UNDER-SIZING — ROOT CAUSES AND FIXES (v5.5):
+
+RESOURCE MODE WIND & H2 UNDER-SIZING — ROOT CAUSES AND FIXES (v5.5):
+
+  FIX-H2CAP [mpbsi_evaluator_resource]:
+         Removed incorrect H2_effective cap: min(x[4], x[3]*24).
+         MATLAB (NSGA_MASTER_RESOURCE.m + microgrid_dispatch_resource.m) uses the
+         full H2 tank for usable_storage = (0.95-0.20)*x(3) + x(5)*eta_FC with NO
+         1-day electrolyzer charging cap.  The cap suppressed H2's contribution to
+         T2/autonomy in the MPBSI reward, pushing the optimizer to under-size H2.
+
+  FIX-FEASIBILITY [mpbsi_evaluator_resource + nsga2_optimize _cv]:
+         Feasibility threshold corrected from renewable_ratio >= 1.0 back to >= 0.99,
+         matching MATLAB microgrid_dispatch_resource.m:
+           Results.feasible = (LPSP <= 1e-4) && (Renewable_ratio >= 0.99)
+         The too-strict 1.0 threshold rejected valid solutions near the Pareto front.
+         The evaluator now delegates to sim.is_feasible (already correct at 0.99).
+
+  FIX-AUT-PENALTY [nsga2_optimize _eval resource + nsga_objective_resource]:
+         REVERTED incorrect FIX-E: the autonomy economic penalty IS present in MATLAB
+         NSGA_Objective_Resource.m (Penalty_factor=0.05, Autonomy_limit=3 days):
+           if Autonomy_days > 3
+               NPC = NPC * (1 + 0.05*(Autonomy_days - 3))
+         FIX-E wrongly removed this penalty claiming it didn't exist.  Without it,
+         large BESS had no NPC cost-of-oversizing → optimizer substituted cheap BESS
+         for Wind (₹120k/kW), causing Wind to be consistently under-sized.  Restoring
+         the penalty re-introduces the correct economic trade-off that drives Wind
+         selection in MATLAB.
 
 KEY NSGA-II FIXES (v5.0 — original):
   1. PSO mission seed: rng(12) [was incorrectly rng(16)]
   2. NSGA _cv() autonomy: mission autonomy >= 7d enforced in constraint-domination
-  3. NSGA resource renewable_ratio constraint: >= 1.0 [was 0.99]
+  3. NSGA resource renewable_ratio constraint: >= 0.99 (MATLAB dispatch threshold)
   4. NSGA population init: pure uniform random (MATLAB exact)
   5. NSGA n_pop=80, max_gen=60 [MATLAB gamultiobj PopulationSize=80, MaxGenerations=60]
   6. nsga_objective_mission: Step9 survivability penalty removed [not in MATLAB]
@@ -50,7 +155,7 @@ MATLAB NSGA BOUNDS:
 
 MATLAB NSGA FEASIBILITY (constraint-domination):
   Mission:  LPSP<=1e-4 AND REN>=1.1 AND Autonomy>=7d
-  Resource: LPSP<=1e-4 AND Annual_RES>=Annual_Load (ratio>=1.0)
+  Resource: LPSP<=1e-4 AND Renewable_ratio>=0.99
 """
 from __future__ import annotations
 
@@ -1553,13 +1658,26 @@ def mpbsi_evaluator_resource(
     Annual_Load = sim.annual_load_MWh
     Annual_RES  = sim.total_renewable_MWh
 
-    # Feasibility (Resource mode — MATLAB: LPSP<=1e-4 AND Annual_RES >= Annual_Load i.e. REN>=1.0)
-    if sim.lpsp_critical > 1e-4 or Annual_RES < Annual_Load:
+    # ── FEASIBILITY (MATLAB MPBSI_Evaluator_Resource_Land.m lines 34-40) ────────
+    # MATLAB evaluator uses: LPSP_critical > 1e-4 OR Annual_RES < Annual_Load
+    # Note: Annual_RES < Annual_Load = Renewable_ratio < 1.0 (stricter than dispatch
+    # field is_feasible which uses 0.99).  The evaluator does NOT use Results.feasible.
+    if sim.lpsp_critical > 1e-4 or sim.total_renewable_MWh < sim.annual_load_MWh:
         return MPBSIResult(mpbsi=-1e6, pillars=Pillars(ESI=0.0,EcSI=0.0,TRI=0.0,ORI=0.0,LSI=0.0), is_feasible=False, simulation=sim)
 
     eta_FC = 0.55
-    # MATLAB: H2_effective = min(x(5), x(4)*24) — limit H2 usefulness by 1-day EL charging cap
-    H2_effective = min(x[4], x[3] * 24.0)
+
+    # ── H2_effective cap (MATLAB line 65) ────────────────────────────────────────
+    # MATLAB MPBSI_Evaluator_Resource_Land.m:
+    #   H2_effective = min(x(5), x(4)*24);   % limit H2 by EL 24-h charging capacity
+    #   usable_storage = (0.95-0.20)*x(3) + H2_effective*eta_FC;
+    #
+    # The cap H2_effective = min(H2_kWh, EL_kW × 24) forces the optimizer to size EL
+    # large enough to fill the H2 tank within 24 h — otherwise H2 credit is capped.
+    # MATLAB solutions: EL×24 ≥ H2 → cap never activates → full H2 credit.
+    # Without this cap (v5.5 mistake), Python had H2=9999 kWh with EL=21 kW giving
+    # only 516 kWh effective H2 — a 95% loss that the evaluator was silently ignoring.
+    H2_effective   = min(x[4], x[3] * 24.0)          # = min(H2_kWh, EL_kW × 24)
     usable_storage = (0.95 - 0.20) * x[2] + H2_effective * eta_FC
     critical_daily = (Annual_Load * 1000.0 / 365.0) * 0.60
     storage_ratio  = usable_storage / max(critical_daily, 1e-6)
@@ -1589,10 +1707,19 @@ def mpbsi_evaluator_resource(
 
     # ── TRI ──────────────────────────────────────────────────────────────────
     T1 = 1.0
-    # T2/T3/T4: MATLAB exact exponential saturations — continuous PSO gradient
+
+    # T2 — MATLAB line 112: T2 = safe_exp(Results.Autonomy_days/1.5)
+    # Uses DISPATCH autonomy (0.80×BESS + E_H2_max×eta_FC, FULL H2 tank, uncapped).
+    # This is intentionally different from storage_ratio which uses H2_effective (capped).
+    # T2 rewards theoretical max autonomy; T4 rewards EL-constrained practical storage.
     T2 = 1.0 - np.exp(-min(sim.autonomy_days / 1.5, 50.0))
+
+    # T3 — MATLAB line 114-115: redundancy = x(3)/1000 + x(6)/100  (BESS+FC only)
+    # This is BESS capacity in MWh + FC power in hundreds of kW.
+    # H2 is NOT in T3 in MATLAB — do not add it (v5.6 incorrectly added H2 here).
     redundancy = (x[2] / 1000.0 + x[5] / 100.0)
     T3 = 1.0 - np.exp(-min(redundancy / 3.0, 50.0))
+
     T4 = 1.0 - np.exp(-min(storage_ratio / 3.0, 50.0))
     TRI = 0.40*T1 + 0.30*T2 + 0.20*T3 + 0.10*T4
 
@@ -1609,6 +1736,8 @@ def mpbsi_evaluator_resource(
     L2 = T2
     L3 = 1.0 / (1.0 + CAPEX / 1e9)
     L4 = T4
+    # L5 — MATLAB line 146: L5 = safe_exp(x(3)/2000)  (BESS-only, MATLAB exact)
+    # H2 is NOT in L5 in MATLAB — v5.6 incorrectly added combined usable_storage here.
     L5 = 1.0 - np.exp(-min(x[2] / 2000.0, 50.0))
     LSI = 0.25*L1 + 0.25*L2 + 0.20*L3 + 0.15*L4 + 0.15*L5
 
@@ -2747,19 +2876,14 @@ def nsga_objective_resource(
     Exact translation of NSGA_Objective_Resource.m.
     Returns (f1, f2): f1 = −MPBSI, f2 = NPC/1e8. Penalty (1e3,1e3) if infeasible.
 
-    Resource mode: MATLAB NSGA_Objective_Resource.m has NO autonomy penalty.
-    Objectives: f1 = -MPBSI, f2 = NPC/1e8 only.
-    Feasibility: LPSP<=1e-4 AND REN>=1.0.
+    Resource mode feasibility: LPSP<=1e-4 AND Annual_RES >= Annual_Load (1.0 threshold).
+    Includes autonomy economic penalty: if Aut>3d: NPC *= (1+0.05*(Aut-3)).
     """
     res = mpbsi_evaluator_resource(x, base, land_available, weights=weights)
-    if res.mpbsi < 0:
+    if res.mpbsi < 0 or res.simulation is None:
         return (1e3, 1e3)
 
-    # FIX: guard against infeasible dispatch result before using sim fields
     sim = res.simulation
-    if not sim.is_feasible:
-        return (1e3, 1e3)
-
     f1 = -res.mpbsi
 
     # NPC calculation (MATLAB NSGA_Objective_Resource.m exact)
@@ -2779,9 +2903,14 @@ def nsga_objective_resource(
     OM_total  = OM_annual * ((1 - (1 + r) ** (-n)) / r)
     NPC       = CAPEX + Bat_repl + FC_repl + EL_repl + OM_total
 
-    # MATLAB NSGA_Objective_Resource.m: NPC only, NO autonomy penalty.
-    # NSGA_MASTER_RESOURCE.m has no autonomy penalty in the objective —
-    # the resource mode is unconstrained on autonomy (smooth reward via T2 in ESI/TRI).
+    # ── AUTONOMY ECONOMIC PENALTY (MATLAB NSGA_Objective_Resource.m exact) ──────
+    # Penalty_factor=0.05, Autonomy_limit=3 days
+    # usable_energy = (0.95-0.20)*x(3) + x(5)*eta_FC  (MATLAB indexing)
+    crit_d_r = (sim.annual_load_MWh * 1000.0 / 365.0) * 0.60
+    aut_r    = (0.75 * x[2] + x[4] * 0.55) / max(crit_d_r, 1e-9)
+    if aut_r > 3.0:
+        NPC *= (1.0 + 0.05 * (aut_r - 3.0))
+
     f2 = NPC / 1e8
     return (f1, f2)
 
@@ -2846,7 +2975,7 @@ def nsga2_optimize(
     base:              BaseData,
     n_pop:             int   = 80,
     max_gen:           int   = 60,
-    seed:              int   = 8,   # MATLAB: rng(8) mission, rng(19) resource — caller overrides per mode
+    seed:              int   = 19,   # MATLAB: rng(8) mission, rng(19) resource — caller overrides per mode
     land_available:    float = 50_000.0,
     var_min:           Optional[np.ndarray] = None,
     var_max:           Optional[np.ndarray] = None,
@@ -2952,8 +3081,9 @@ def nsga2_optimize(
             cv = 0.0
             if s.lpsp_critical > 1e-4:
                 cv += s.lpsp_critical - 1e-4
-            # MATLAB NSGA_Objective_Resource.m: Annual_RES >= Annual_Load
-            # (feasibility: renewable_ratio >= 1.0, not 0.99)
+            # MATLAB MPBSI_Evaluator_Resource_Land.m uses Annual_RES < Annual_Load
+            # (Renewable_ratio >= 1.0, not 0.99).  The dispatch flag uses 0.99 but
+            # the evaluator's own feasibility check uses the 1.0 threshold.
             if s.renewable_ratio < 1.0:
                 cv += (1.0 - s.renewable_ratio)
             return cv
@@ -2978,8 +3108,20 @@ def nsga2_optimize(
             NPC  = (cp + _UC["batt"]*x[2]/(1+r_d)**10 + _UC["fc"]*x[5]/(1+r_d)**10
                     + _UC["el"]*x[3]/(1+r_d)**15
                     + 0.02*cp*((1-(1+r_d)**(-n_d))/r_d))
-            # MATLAB NSGA_Objective_Resource.m: NPC only, NO autonomy penalty.
-            # Resource mode has no autonomy constraint in the NSGA objective.
+            # ── AUTONOMY ECONOMIC PENALTY (RESOURCE MODE) ────────────────────
+            # MATLAB NSGA_Objective_Resource.m (restored — FIX-E incorrectly removed this):
+            #   usable_energy  = (0.95-0.20)*x(3) + x(5)*eta_FC
+            #   critical_daily = (Results.Annual_Load_MWh*1000/365)*0.60
+            #   Autonomy_days  = usable_energy / critical_daily
+            #   Autonomy_limit = 3;  Penalty_factor = 0.05
+            #   if Autonomy_days > Autonomy_limit
+            #       NPC = NPC * (1 + Penalty_factor*(Autonomy_days - Autonomy_limit))
+            # This penalty discourages over-sizing storage, preserving the incentive
+            # for Wind+PV generation — its absence caused Wind and H2 to be under-sized.
+            crit_d_r = (s.annual_load_MWh * 1000.0 / 365.0) * 0.60
+            aut_r    = (0.75 * x[2] + x[4] * 0.55) / max(crit_d_r, 1e-9)
+            if aut_r > 3.0:
+                NPC *= (1.0 + 0.05 * (aut_r - 3.0))
             f2 = float(NPC) / 1e8
             return np.array([-float(res.mpbsi), f2], dtype=np.float64), res, cv
         else:

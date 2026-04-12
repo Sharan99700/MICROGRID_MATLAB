@@ -1829,7 +1829,7 @@
                             plot_bgcolor:'rgba(8,12,30,0.55)',
                             font:{color:'#c8d8f0',family:"'IBM Plex Sans',sans-serif",size:12},
                             xaxis:{color:'#8b9dc3',gridcolor:'rgba(0,180,216,0.09)',
-                                   tickfont:{color:'#8b9dc3',size:11,family:"'IBM Plex Mono',monospace"},
+                                   tickfont:{color:'#8b9dc3',size:12,family:"'IBM Plex Mono',monospace"},
                                    linecolor:'rgba(0,180,216,0.15)',showline:true},
                             yaxis:{color:'#8b9dc3',gridcolor:'rgba(0,180,216,0.09)',
                                    title:{text:'kW / kW/m²',font:{color:'#8b9dc3',size:11}},
@@ -2372,15 +2372,15 @@
                         </div>
                     </div>` : ''}
                 <!-- ── CHARTS: Optimal Sizing ── -->
-                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:18px;">
+                <div style="display:flex;flex-direction:column;gap:18px;margin-top:18px;">
                     <div class="card" style="padding:20px 18px 14px;">
-                        <div id="g_config" style="width:100%;height:300px;"></div>
+                        <div id="g_config" style="width:100%;height:420px;"></div>
                     </div>
                     <div class="card" style="padding:20px 18px 14px;">
-                        <div id="g_bars" style="width:100%;height:300px;"></div>
+                        <div id="g_bars" style="width:100%;height:420px;"></div>
                     </div>
                     <div class="card" style="padding:20px 18px 14px;">
-                        <div id="g_radar" style="width:100%;height:300px;"></div>
+                        <div id="g_radar" style="width:100%;height:420px;"></div>
                     </div>
                 </div>
                 </div><!-- /rt_config -->
@@ -2453,12 +2453,12 @@
                         </div>`;
                     })()}
                 <!-- ── CHARTS: CAPEX & NPC ── -->
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:18px;">
+                <div style="display:flex;flex-direction:column;gap:18px;margin-top:18px;">
                     <div class="card" style="padding:20px 18px 14px;">
-                        <div id="g_capex_pie" style="width:100%;height:320px;"></div>
+                        <div id="g_capex_pie" style="width:100%;height:440px;"></div>
                     </div>
                     <div class="card" style="padding:20px 18px 14px;">
-                        <div id="g_conv" style="width:100%;height:320px;"></div>
+                        <div id="g_conv" style="width:100%;height:440px;"></div>
                     </div>
                 </div>
                 </div><!-- /rt_capex -->
@@ -2626,16 +2626,16 @@
                         `;
                     })()}
                 <!-- ── CHARTS: CO2 & Environment ── -->
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:18px;">
+                <div style="display:flex;flex-direction:column;gap:18px;margin-top:18px;">
                     <div class="card" style="padding:20px 18px 14px;">
-                        <div id="g_co2bar" style="width:100%;height:310px;"></div>
+                        <div id="g_co2bar" style="width:100%;height:420px;"></div>
                     </div>
                     <div class="card" style="padding:20px 18px 14px;">
-                        <div id="g_pie" style="width:100%;height:310px;"></div>
+                        <div id="g_pie" style="width:100%;height:440px;"></div>
                     </div>
-                </div>
-                <div class="card" style="padding:20px 18px 14px;margin-top:16px;">
-                    <div id="g_energy" style="width:100%;height:240px;"></div>
+                    <div class="card" style="padding:20px 18px 14px;">
+                        <div id="g_energy" style="width:100%;height:340px;"></div>
+                    </div>
                 </div>
                 </div><!-- /rt_co2 -->
 
@@ -2939,8 +2939,8 @@
             const BG   = 'rgba(0,0,0,0)';
             const BASE = {
                 paper_bgcolor: BG, plot_bgcolor: 'rgba(8,12,30,0.55)',
-                font: { family:"'IBM Plex Sans','IBM Plex Mono',monospace", color:'#c8d8f0', size:12 },
-                margin: { t:28, r:24, b:54, l:64 },
+                font: { family:"'IBM Plex Sans','IBM Plex Mono',monospace", color:'#c8d8f0', size:13 },
+                margin: { t:36, r:32, b:60, l:72 },
                 legend: {
                     bgcolor:'rgba(6,10,28,0.85)', bordercolor:'rgba(0,180,216,0.18)',
                     borderwidth:1, font:{color:'#c8d8f0',size:11},
@@ -3008,14 +3008,14 @@
                     },
                     text: vals.map((v,i) => `<b>${v.toFixed(1)}</b> ${units[i]}`),
                     textposition:'outside',
-                    textfont:{color:'#d0e4ff',size:11,family:"'IBM Plex Mono',monospace"},
+                    textfont:{color:'#d0e4ff',size:13,family:"'IBM Plex Mono',monospace"},
                     hovertemplate:'<b>%{y}</b><br><span style="color:#FFD700">%{x:.1f}</span><extra></extra>',
                     name:'Optimal Size',
                     width: Array(6).fill(0.62),
                 }], {
                     ...BASE,
-                    title:{text:'Optimal Component Sizing',font:{color:'#90b8d8',size:13,family:"'IBM Plex Sans',sans-serif"},x:0.5,xanchor:'center',y:0.98},
-                    margin:{t:44,r:100,b:44,l:104},
+                    title:{text:'Optimal Component Sizing',font:{color:'#90b8d8',size:15,family:"'IBM Plex Sans',sans-serif"},x:0.5,xanchor:'center',y:0.98},
+                    margin:{t:48,r:120,b:56,l:120},
                     xaxis:{...AX, title:{text:'Capacity (units vary)',font:{color:'#8b9dc3',size:11}}, showgrid:true, gridcolor:'rgba(0,180,216,0.1)'},
                     yaxis:{...AX, showgrid:false, autorange:'reversed', tickfont:{...AX.tickfont,size:12}},
                     bargap:0.32,
@@ -3041,7 +3041,7 @@
                         },
                         text: pVals.map(v=>`<b>${(v*100).toFixed(1)}%</b>`),
                         textposition:'outside',
-                        textfont:{color:'#d0e4ff',size:12,family:"'IBM Plex Mono',monospace"},
+                        textfont:{color:'#d0e4ff',size:13,family:"'IBM Plex Mono',monospace"},
                         hovertemplate:'<b>%{x}</b><br>Score: <b style="color:#FFD700">%{y:.2f}%</b><extra></extra>',
                         width: Array(pKeys.length).fill(0.55),
                     },
@@ -3053,8 +3053,8 @@
                     }
                 ], {
                     ...BASE,
-                    title:{text:'MPBSI Pillar Scores',font:{color:'#90b8d8',size:13,family:"'IBM Plex Sans',sans-serif"},x:0.5,xanchor:'center',y:0.98},
-                    margin:{t:44,r:20,b:50,l:56},
+                    title:{text:'MPBSI Pillar Scores',font:{color:'#90b8d8',size:15,family:"'IBM Plex Sans',sans-serif"},x:0.5,xanchor:'center',y:0.98},
+                    margin:{t:48,r:28,b:60,l:64},
                     xaxis:{...AX, showgrid:false, tickfont:{...AX.tickfont,size:12}},
                     yaxis:{...AX, title:{text:'Score (%)',font:{color:'#8b9dc3',size:11}},
                            range:[0,115], showgrid:true, gridcolor:'rgba(0,180,216,0.1)'},
@@ -3087,8 +3087,8 @@
                     }
                 ], {
                     ...BASE,
-                    title:{text:'Pillar Radar',font:{color:'#90b8d8',size:13,family:"'IBM Plex Sans',sans-serif"},x:0.5,xanchor:'center',y:0.98},
-                    margin:{t:44,r:36,b:28,l:36},
+                    title:{text:'Pillar Radar',font:{color:'#90b8d8',size:15,family:"'IBM Plex Sans',sans-serif"},x:0.5,xanchor:'center',y:0.98},
+                    margin:{t:52,r:60,b:40,l:60},
                     polar:{
                         bgcolor:'rgba(8,14,40,0.6)',
                         radialaxis:{visible:true, range:[0,100], ticksuffix:'%',
@@ -3097,7 +3097,7 @@
                                     tickfont:{color:'#8b9dc3',size:10,family:"'IBM Plex Mono',monospace"}},
                         angularaxis:{color:'#8b9dc3', gridcolor:'rgba(0,180,216,0.15)',
                                      linecolor:'rgba(0,180,216,0.2)',
-                                     tickfont:{color:'#c8d8f0',size:12,family:"'IBM Plex Sans',sans-serif"}}
+                                     tickfont:{color:'#c8d8f0',size:13,family:"'IBM Plex Sans',sans-serif"}}
                     },
                     showlegend:false
                 });
@@ -3127,10 +3127,10 @@
                     direction:'clockwise',
                     rotation:30,
                     pull:[0.03,0,0,0,0,0],
-                    domain:{ x:[0, 0.60], y:[0, 1] },
+                    domain:{ x:[0, 0.55], y:[0.04, 0.96] },
                 }], {
                     ...BASE,
-                    title:{text:'CAPEX Distribution',font:{color:'#90b8d8',size:13,family:"'IBM Plex Sans',sans-serif"},x:0.5,xanchor:'center',y:0.99},
+                    title:{text:'CAPEX Distribution',font:{color:'#90b8d8',size:15,family:"'IBM Plex Sans',sans-serif"},x:0.5,xanchor:'center',y:0.99},
                     margin:{t:44,r:10,b:16,l:10},
                     annotations:[{
                         text:'<b>₹' + totalC.toFixed(1) + '</b><br>Crore',
@@ -3140,9 +3140,10 @@
                     legend:{
                         ...BASE.legend,
                         orientation:'v',
-                        x:0.63, y:0.5,
+                        x:0.58, y:0.5,
                         xanchor:'left',
                         yanchor:'middle',
+                        font:{...BASE.legend.font, size:13},
                     }
                 });
             }
@@ -3163,8 +3164,8 @@
                     hovertemplate:'Iter <b>%{x}</b>: <b style="color:#38ef7d">%{y:.6f}</b><extra></extra>'
                 }], {
                     ...BASE,
-                    title:{text:'PSO Convergence Curve',font:{color:'#90b8d8',size:13,family:"'IBM Plex Sans',sans-serif"},x:0.5,xanchor:'center',y:0.98},
-                    margin:{t:48,r:24,b:56,l:68},
+                    title:{text:'PSO Convergence Curve',font:{color:'#90b8d8',size:15,family:"'IBM Plex Sans',sans-serif"},x:0.5,xanchor:'center',y:0.98},
+                    margin:{t:52,r:32,b:64,l:76},
                     xaxis:{...AX, title:{text:'Iteration',font:{color:'#8b9dc3',size:11}},
                            dtick:Math.ceil(conv.length/8), showgrid:true},
                     yaxis:{...AX, title:{text:'MPBSI Score',font:{color:'#8b9dc3',size:11}},
@@ -3200,8 +3201,8 @@
                     width: Array(nKeys.length).fill(0.55),
                 }], {
                     ...BASE,
-                    title:{text:'20-Year NPC Stack',font:{color:'#90b8d8',size:13,family:"'IBM Plex Sans',sans-serif"},x:0.5,xanchor:'center',y:0.98},
-                    margin:{t:48,r:24,b:56,l:68},
+                    title:{text:'20-Year NPC Stack',font:{color:'#90b8d8',size:15,family:"'IBM Plex Sans',sans-serif"},x:0.5,xanchor:'center',y:0.98},
+                    margin:{t:52,r:32,b:64,l:76},
                     xaxis:{...AX, showgrid:false, tickfont:{...AX.tickfont,size:12}},
                     yaxis:{...AX, title:{text:'₹ Crore',font:{color:'#8b9dc3',size:11}}, showgrid:true},
                 });
@@ -3234,8 +3235,8 @@
                     width: Array(5).fill(0.55),
                 }], {
                     ...BASE,
-                    title:{text:'Cumulative CO₂ Avoidance',font:{color:'#90b8d8',size:13,family:"'IBM Plex Sans',sans-serif"},x:0.5,xanchor:'center',y:0.98},
-                    margin:{t:48,r:24,b:56,l:68},
+                    title:{text:'Cumulative CO₂ Avoidance',font:{color:'#90b8d8',size:15,family:"'IBM Plex Sans',sans-serif"},x:0.5,xanchor:'center',y:0.98},
+                    margin:{t:52,r:32,b:64,l:76},
                     xaxis:{...AX, showgrid:false, tickfont:{...AX.tickfont,size:12}},
                     yaxis:{...AX, title:{text:'CO₂ Avoided (ton)',font:{color:'#8b9dc3',size:11}}, showgrid:true},
                     annotations:[{
@@ -3268,22 +3269,23 @@
                     hovertemplate:'<b>%{label}</b><br>Weighted: <b>%{value:.2f}</b><br><b>%{percent}</b><extra></extra>',
                     direction:'clockwise',
                     pull: pKeys.map((_,i)=>i===0?0.04:0),
-                    domain:{ x:[0, 0.65], y:[0, 1] },
+                    domain:{ x:[0, 0.55], y:[0.04, 0.96] },
                 }], {
                     ...BASE,
-                    title:{text:'Pillar Contribution to MPBSI',font:{color:'#90b8d8',size:13,family:"'IBM Plex Sans',sans-serif"},x:0.5,xanchor:'center',y:0.99},
+                    title:{text:'Pillar Contribution to MPBSI',font:{color:'#90b8d8',size:15,family:"'IBM Plex Sans',sans-serif"},x:0.5,xanchor:'center',y:0.99},
                     margin:{t:44,r:10,b:16,l:10},
                     annotations:[{
                         text:'<b>MPBSI<br>' + ((opt.best_mpbsi??opt.mpbsi)??0).toFixed(4) + '</b>',
-                        x:0.325, y:0.5, showarrow:false,
+                        x:0.275, y:0.5, showarrow:false,
                         font:{color:'#FFD700',size:14,family:"'IBM Plex Mono',monospace"}
                     }],
                     legend:{
                         ...BASE.legend,
                         orientation:'v',
-                        x:0.68, y:0.5,
+                        x:0.58, y:0.5,
                         xanchor:'left',
                         yanchor:'middle',
+                        font:{...BASE.legend.font, size:13},
                     }
                 });
             }
@@ -3330,9 +3332,9 @@
                     }
                 ], {
                     ...BASE,
-                    title:{text:'Annual Energy Balance',font:{color:'#90b8d8',size:13,family:"'IBM Plex Sans',sans-serif"},x:0.5,xanchor:'center',y:0.98},
+                    title:{text:'Annual Energy Balance',font:{color:'#90b8d8',size:15,family:"'IBM Plex Sans',sans-serif"},x:0.5,xanchor:'center',y:0.98},
                     barmode:'stack',
-                    margin:{t:48,r:24,b:56,l:90},
+                    margin:{t:52,r:32,b:64,l:100},
                     xaxis:{...AX, title:{text:'MWh / year',font:{color:'#8b9dc3',size:11}}, showgrid:true},
                     yaxis:{...AX, showgrid:false, tickfont:{...AX.tickfont,size:12}},
                     showlegend:true
@@ -4193,7 +4195,7 @@
                     textfont:{color:'#fff',size:11,family:"'IBM Plex Sans',sans-serif"},
                     hovertemplate:'<b>%{label}</b><br>₹%{value:.2f} Cr (%{percent})<extra></extra>',
                     direction:'clockwise', rotation:30,
-                    domain:{ x:[0, 0.60], y:[0, 1] },
+                    domain:{ x:[0, 0.55], y:[0.04, 0.96] },
                 }], {
                     ...dark,
                     title:{text:'CAPEX Distribution',font:{color:'#90b8d8',size:13,family:"'IBM Plex Sans',sans-serif"},x:0.5,xanchor:'center'},
