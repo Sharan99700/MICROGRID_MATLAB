@@ -56,7 +56,7 @@ except ImportError as _e:
 #  PAGE CONFIG
 # ══════════════════════════════════════════════════════════════════════════════
 st.set_page_config(
-    page_title="MPBSI Framework",
+    page_title="OPTIMIZATON OF MICROGRID USING MPBSI",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -334,8 +334,8 @@ sys.path[0]:  {sys.path[0]}</pre>
 st.markdown("""
 <div class="mpbsi-hero">
   <div>
-    <div class="hero-title">⚡ MPBSI Framework</div>
-    <div class="hero-sub">Mission-Priority Benchmark Sustainability Index · Grid-Independent Renewable Microgrids</div>
+    <div class="hero-title">⚡ Microgrid Design Optimizer - MPBSI</div>
+    <div class="hero-sub">Mission-Priority based Sustainability Index · Autonomous , Self Sustained and Grid-Independent Microgrids</div>
   </div>
 </div>
 """, unsafe_allow_html=True)
@@ -349,7 +349,7 @@ with st.sidebar:
 
     # ── Header (native) ──
     st.markdown("## ⚡ MPBSI Framework")
-    st.caption("Mission-Priority Benchmark Sustainability Index")
+    st.caption("Mission-Priority Based Sustainability Index")
     st.markdown(
         '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 12px;">'
         '<span style="background:rgba(102,126,234,0.18);border:1px solid rgba(102,126,234,0.4);'
@@ -382,36 +382,20 @@ with st.sidebar:
     st.markdown("##### 🎯 Optimisation Mode")
     mode = st.radio(
         "Mode",
-        ["Mission", "Resource"],
+        ["Resource", "Mission"],
         horizontal=True,
         index=0,
         label_visibility="collapsed",
         help=(
-            "**Mission Mode** — Military doctrine: hard 7-day autonomy constraint, "
-            "LPSP ≤ 1e-4, REN ≥ 99.9%. Weights: ESI 30% | EcSI 25% | TRI 15% | ORI 15% | LSI 15%.\n\n"
             "**Resource Mode** — Grid-tied / peacetime: no hard autonomy limit (smooth reward), "
-            "LPSP ≤ 1e-4, 100% renewable. Weights: ESI 5% | EcSI 20% | TRI 30% | ORI 25% | LSI 20%."
+            "LPSP ≤ 1e-4, 100% renewable. Weights: ESI 5% | EcSI 20% | TRI 30% | ORI 25% | LSI 20%.\n\n"
+            "**Mission Mode** — Military doctrine: hard 7-day autonomy constraint, "
+            "LPSP ≤ 1e-4, REN ≥ 99.9%. Weights: ESI 30% | EcSI 25% | TRI 15% | ORI 15% | LSI 15%."
         ),
     )
-    mode_key = mode.lower()  # "mission" or "resource"
+    mode_key = mode.lower()  # "resource" or "mission"
 
-    # Mode info badge
-    if mode == "Mission":
-        st.markdown(
-            "<div style='background:rgba(167,139,250,0.10);border:1px solid rgba(167,139,250,0.3);"
-            "border-radius:8px;padding:8px 12px;font-size:0.78em;color:#a78bfa;margin-bottom:4px;'>"
-            "⚔️ <b>Mission Mode</b> — 7-day autonomy · REN≥1.1 · Wind V_ci=2.5/V_r=10/exp=2.2 · ESI=10% EcSI=20% TRI=25% ORI=25% LSI=20%"
-            "</div>",
-            unsafe_allow_html=True,
-        )
-    else:
-        st.markdown(
-            "<div style='background:rgba(56,239,125,0.08);border:1px solid rgba(56,239,125,0.25);"
-            "border-radius:8px;padding:8px 12px;font-size:0.78em;color:#38ef7d;margin-bottom:4px;'>"
-            "🌿 <b>Resource Mode</b> — No autonomy hard limit · Wind: V_ci=2.5 V_r=10 V_co=20 exp=2.2 η=0.80 · EL always ON · Resource strategic lifecycle"
-            "</div>",
-            unsafe_allow_html=True,
-        )
+
 
     st.divider()
 
@@ -419,41 +403,32 @@ with st.sidebar:
     st.markdown("##### 🚀 Algorithm")
     algo = st.radio("Algorithm", ["PSO", "NSGA-II"], horizontal=True,
                     index=0, label_visibility="collapsed")
+    # Fixed to MATLAB defaults — not exposed in UI
     if algo == "PSO":
-        n_pop  = st.slider("Swarm size (nPop)",  5, 100, 30, key="pso_np")   # MATLAB: nPop=30
-        max_it = st.slider("Max iterations",      5, 200, 80, key="pso_it")   # MATLAB: MaxIt=80
+        n_pop, max_it = 30, 80    # MATLAB: nPop=30, MaxIt=80
     else:
-        n_pop  = st.slider("Population",  10, 200, 80, key="ng_np")   # MATLAB: PopulationSize=80
-        max_it = st.slider("Generations",  5, 100, 60, key="ng_it")   # MATLAB: MaxGenerations=60
+        n_pop, max_it = 80, 60    # MATLAB: PopulationSize=80, MaxGenerations=60
     # PSO hyper-parameters fixed to MATLAB defaults (not exposed in UI)
     pso_w = 0.8; pso_wdamp = 0.98; pso_c1 = 1.5; pso_c2 = 1.5
     seed  = 16  # MATLAB exact: rng(16) for PSO (both resource and mission)
 
     # ── MATLAB result mat files ──────────────────────────────────────────────
-    uploaded_pareto = None
+    uploaded_pareto = None   # Mat upload disabled — Python optimizer used directly
 
-    uploaded_pareto = None  # No mat upload needed — Python matches MATLAB natively
-
+    st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("##### 🏗️ Site Parameters")
     land_m2 = st.number_input(
         "Available Land Area (m²)",
         min_value=1000, max_value=500_000, value=8_000, step=1000,
-        help=(
-            "Physics-derived bounds: PV_max=Land/10 kWp, Wind_max=Land/15 kW.\n\n"
-            "8000 m² = MATLAB reference (Akhnoor site) → results match MATLAB exactly.\n"
-            "Change this to model a different site's land constraint."
-        )
+        
     )
-    if abs(land_m2 - 8000) < 100:
-        st.caption(f"→ PV_max={land_m2//10:,} kWp | Wind_max={land_m2//15:,} kW  ✅ Matches MATLAB reference (8000 m²)")
-    else:
-        st.caption(f"→ PV_max={land_m2//10:,} kWp | Wind_max={land_m2//15:,} kW  ⚠️ Custom land (MATLAB ref = 8000 m²)")
+    
 
     st.divider()
 
     # ── MPBSI Pillar Weights ──
     st.markdown("##### ⚖️ MPBSI Pillar Weights")
-    _def = {"mission": (0.10, 0.20, 0.25, 0.25, 0.20),  # MATLAB MPBSI_Evaluator_Mission_Land.m
+    _def = {"mission": (0.05, 0.20, 0.30, 0.25, 0.20),  # MATLAB MPBSI_Evaluator_Mission_Land.m
             "resource": (0.05, 0.20, 0.30, 0.25, 0.20)}
     _d = _def.get(mode_key, _def["mission"])
     with st.expander("Adjust pillar weights", expanded=False):
@@ -468,7 +443,7 @@ with st.sidebar:
             st.success(f"✅ Weights sum = {_sum:.2f}")
         else:
             st.error(f"⚠️ Weights sum = {_sum:.2f} — must equal 1.00 before running")
-        if st.button("↺ Reset to mode defaults", key="reset_weights"):
+        if st.button("↺ Reset to default mode ", key="reset_weights"):
             for k, v in zip(["w_esi","w_ecsi","w_tri","w_ori","w_lsi"], _d):
                 st.session_state[k] = v
             st.rerun()
@@ -478,6 +453,56 @@ with st.sidebar:
     w_tri  = float(st.session_state.get("w_tri",  _d[2]))
     w_ori  = float(st.session_state.get("w_ori",  _d[3]))
     w_lsi  = float(st.session_state.get("w_lsi",  _d[4]))
+
+    st.divider()
+
+    # ── Component Unit Costs ─────────────────────────────────────────────
+    st.markdown("##### 💰 Component Unit Costs")
+    _def_costs = {
+        "pv":   55_000,   "wind": 120_000,
+        "batt":  15_000,  "el":    70_000,
+        "h2":   15_000,   "fc":   110_000,
+    }
+    with st.expander("Adjust component costs (₹)", expanded=False):
+        
+        # Use _cv_ prefixed internal keys — separate from any widget key
+        # so Reset can freely write to them without Streamlit widget-key conflict
+        if st.button("↺ Reset to default mode ", key="reset_costs"):
+            for k, v in _def_costs.items():
+                st.session_state[f"_cv_{k}"] = v
+            st.rerun()
+        cc1, cc2 = st.columns(2)
+        cost_pv   = cc1.number_input("PV (₹/kWp)",         min_value=1_000,  max_value=500_000,
+                                      value=int(st.session_state.get("_cv_pv",   _def_costs["pv"])),
+                                      step=1_000,  help="55,000 ₹/kWp — MATLAB default")
+        st.session_state["_cv_pv"] = cost_pv
+        cost_wind = cc2.number_input("Wind (₹/kW)",         min_value=1_000,  max_value=1_000_000,
+                                      value=int(st.session_state.get("_cv_wind", _def_costs["wind"])),
+                                      step=5_000,  help="1,20,000 ₹/kW — MATLAB default")
+        st.session_state["_cv_wind"] = cost_wind
+        cost_batt = cc1.number_input("Battery (₹/kWh)",     min_value=500,    max_value=200_000,
+                                      value=int(st.session_state.get("_cv_batt", _def_costs["batt"])),
+                                      step=500,    help="15,000 ₹/kWh — MATLAB default")
+        st.session_state["_cv_batt"] = cost_batt
+        cost_el   = cc2.number_input("Electrolyser (₹/kW)", min_value=1_000,  max_value=500_000,
+                                      value=int(st.session_state.get("_cv_el",   _def_costs["el"])),
+                                      step=1_000,  help="70,000 ₹/kW — MATLAB default")
+        st.session_state["_cv_el"] = cost_el
+        cost_h2   = cc1.number_input("H₂ Storage (₹/kWh)", min_value=500,    max_value=200_000,
+                                      value=int(st.session_state.get("_cv_h2",   _def_costs["h2"])),
+                                      step=500,    help="15,000 ₹/kWh — MATLAB default")
+        st.session_state["_cv_h2"] = cost_h2
+        cost_fc   = cc2.number_input("Fuel Cell (₹/kW)",    min_value=1_000,  max_value=500_000,
+                                      value=int(st.session_state.get("_cv_fc",   _def_costs["fc"])),
+                                      step=1_000,  help="1,10,000 ₹/kW — MATLAB default")
+        st.session_state["_cv_fc"] = cost_fc
+    # Read persisted values (outside expander so always available)
+    cost_pv   = int(st.session_state.get("_cv_pv",   _def_costs["pv"]))
+    cost_wind = int(st.session_state.get("_cv_wind", _def_costs["wind"]))
+    cost_batt = int(st.session_state.get("_cv_batt", _def_costs["batt"]))
+    cost_el   = int(st.session_state.get("_cv_el",   _def_costs["el"]))
+    cost_h2   = int(st.session_state.get("_cv_h2",   _def_costs["h2"]))
+    cost_fc   = int(st.session_state.get("_cv_fc",   _def_costs["fc"]))
 
     st.divider()
 
@@ -1076,14 +1101,14 @@ def generate_pdf_report(results: dict) -> bytes:
                               bg=colors.HexColor("#8a6000")))
     story.append(Spacer(1, 4*mm))
 
-    # Default cost parameters (matching the HTML defaults)
+    # Use user-adjusted costs from sidebar (fall back to MATLAB defaults)
     costs = {
-        "PV":      55_000,   # ₹/kWp
-        "Wind":   120_000,   # ₹/kW
-        "Battery": 22_000,   # ₹/kWh
-        "Electrolyzer": 70_000,  # ₹/kW
-        "H2":      80_000,   # ₹/kWh
-        "FC":     110_000,   # ₹/kW
+        "PV":          int(st.session_state.get("_cv_pv",    55_000)),
+        "Wind":        int(st.session_state.get("_cv_wind", 120_000)),
+        "Battery":     int(st.session_state.get("_cv_batt",  15_000)),
+        "Electrolyzer":int(st.session_state.get("_cv_el",    70_000)),
+        "H2":          int(st.session_state.get("_cv_h2",    15_000)),
+        "FC":          int(st.session_state.get("_cv_fc",   110_000)),
     }
     r, n, om_rate = 0.08, 20, 0.02
     bat_yr, fc_yr, el_yr = 10, 10, 15
@@ -1546,11 +1571,11 @@ if run_btn:
         </div>
         <div class="mpbsi-step" id="lstep2">
             <div class="mpbsi-step-icon">🔋</div>
-            <span>Running battery dispatch simulation (Step 5)</span>
+            <span>Running battery dispatch simulation</span>
         </div>
         <div class="mpbsi-step" id="lstep3">
             <div class="mpbsi-step-icon">⚗️</div>
-            <span>Evaluating H₂ storage &amp; fuel cell (Steps 7–9)</span>
+            <span>Evaluating H₂ storage &amp; fuel cell</span>
         </div>
         <div class="mpbsi-step" id="lstep4">
             <div class="mpbsi-step-icon">🧬</div>
@@ -1613,6 +1638,13 @@ if run_btn:
         "w_tri":          float(w_tri),
         "w_ori":          float(w_ori),
         "w_lsi":          float(w_lsi),
+        # Component unit costs from sidebar
+        "cost_pv":   cost_pv,
+        "cost_wind": cost_wind,
+        "cost_batt": cost_batt,
+        "cost_el":   cost_el,
+        "cost_h2":   cost_h2,
+        "cost_fc":   cost_fc,
         # Bounds only sent if user changed from defaults
         "bounds": {
             # Bounds: None → backend computes physics-derived MATLAB-exact bounds
@@ -1634,15 +1666,7 @@ if run_btn:
         tmp.close()
         dataset_path = tmp.name
 
-        # ── Save NSGA Pareto mat alongside the dataset ───────────────────────
-        if uploaded_pareto is not None:
-            _pareto_path = os.path.join(
-                os.path.dirname(dataset_path),
-                uploaded_pareto.name
-            )
-            with open(_pareto_path, "wb") as _pf:
-                _pf.write(uploaded_pareto.getvalue())
-            st.info(f"📊 Pareto mat loaded — Cases A/B/C will match MATLAB exactly")
+        # Mat upload disabled — Python NSGA produces directly comparable results
 
 
     else:
@@ -1668,13 +1692,22 @@ if run_btn:
     pso_max_it   = config.get("pso_max_it", 80) if algo == "PSO" else config.get("nsga2_max_gen", 50)
 
     def _progress_cb(it, max_it, best_mpbsi, feasible_count, phase=None):
-        """Called by backend after every PSO iteration (and during init)."""
+        """Called by backend after every PSO/NSGA iteration (and during init)."""
         try:
             if phase:
                 prog_bar.progress(3, text=f"🔍 Initialising swarm… {phase}")
                 iter_status.markdown(
                     f"<div style='font-family:monospace;font-size:0.88em;color:#a0a8d4;'>"
                     f"⚙️ Evaluating initial particles: <b style='color:#c8d0e8'>{phase}</b></div>",
+                    unsafe_allow_html=True
+                )
+                return
+            # When optimizer finishes its last iteration, show "computing results" state
+            if it >= max_it:
+                prog_bar.progress(90, text="🔧 Optimizer done — computing results & lifecycle…")
+                iter_status.markdown(
+                    "<div style='font-family:monospace;font-size:0.88em;color:#a0a8d4;margin-top:6px;'>"
+                    "⏳ Computing lifecycle NPC, H₂ logistics and Pareto case analysis…</div>",
                     unsafe_allow_html=True
                 )
                 return
@@ -1709,6 +1742,19 @@ if run_btn:
     # Update progress bar for the pipeline steps (before PSO starts)
     prog_bar.progress(5, text="📂 Step 1: Loading dataset…")
 
+    # ── Post-processing status display ───────────────────────────────────────
+    def _post_progress_cb(msg):
+        """Called during backend post-processing (lifecycle, H2 logistics, etc.)."""
+        try:
+            prog_bar.progress(97, text=msg)
+            iter_status.markdown(
+                f"<div style='font-family:monospace;font-size:0.88em;color:#a0a8d4;margin-top:6px;'>"
+                f"🔧 {msg}</div>",
+                unsafe_allow_html=True
+            )
+        except Exception:
+            pass
+
     try:
         results = run_pipeline(
             algo=algo,
@@ -1716,6 +1762,7 @@ if run_btn:
             config=config,
             progress_callback=_progress_cb,
             mode=mode_key,
+            post_progress=_post_progress_cb,
         )
     except Exception as exc:
         st.error(f"❌ Pipeline error: {exc}")
